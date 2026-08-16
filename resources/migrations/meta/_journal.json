@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786794885882,
+      "tag": "0000_faithful_spencer_smythe",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786867798433,
+      "tag": "0001_lonely_vertigo",
+      "breakpoints": true
+    }
+  ]
+}

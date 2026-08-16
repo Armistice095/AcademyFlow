@@ -1,0 +1,17 @@
+node_modules
+out
+dist
+.env
+.env.*
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+resources/logo-source.png
+
+# Base de données locale (dev)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+academyflow.dev.db*
