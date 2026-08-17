@@ -96,7 +96,7 @@ export function StudentCreatePage(): JSX.Element {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex max-w-3xl flex-col gap-5">
+    <form onSubmit={handleSubmit(onSubmit)} className="mx-auto flex max-w-3xl flex-col gap-5">
       {duplicate && (
         <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />

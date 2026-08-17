@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, User, Users } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
@@ -52,6 +52,22 @@ export function StudentsListPage(): JSX.Element {
 
   const columns = useMemo<ColumnDef<StudentListItem>[]>(
     () => [
+      {
+        id: 'photo',
+        header: '',
+        cell: ({ row }) =>
+          row.original.photoPath ? (
+            <img
+              src={row.original.photoPath}
+              alt=""
+              className="h-9 w-9 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-input bg-muted">
+              <User className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )
+      },
       { accessorKey: 'matricule', header: 'Matricule' },
       {
         id: 'name',
@@ -77,7 +93,7 @@ export function StudentsListPage(): JSX.Element {
       },
       {
         id: 'actions',
-        header: '',
+        header: 'Actions',
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

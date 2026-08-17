@@ -77,6 +77,14 @@ export interface TuitionAccount {
   balance: number
 }
 
+/** Vue enrichie pour la liste globale des arriérés (F-021), sans requête supplémentaire par élève. */
+export interface ArrearsStudent extends TuitionAccount {
+  matricule: string
+  studentName: string
+  className: string
+  lateInstallmentsCount: number
+}
+
 // ---------------------------------------------------------------------------
 // Rapport de caisse (F-017)
 // ---------------------------------------------------------------------------

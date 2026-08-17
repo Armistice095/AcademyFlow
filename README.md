@@ -12,12 +12,12 @@ Electron + Vite + React + TypeScript + Tailwind CSS v4 + shadcn/ui.
 **Phase 4 — Authentification** ✅
 **Phase 5 — Module Paramètres** ✅ *(+ ajout Informations de l'établissement)*
 **Phase 6 — Module Élèves** ✅
+**Phase 7 — Module Caisse** ✅
 
-Inscription complète (formulaire multi-sections, détection de doublons en temps réel,
-matricule auto-généré), liste avec recherche/filtres/export, fiche élève éditable
-(infos, parcours scolaire, responsables), passage de classe atomique (promotion/
-redoublement), génération de 4 documents PDF (attestation, certificat, fiche, liste
-de classe) ouverts dans la visionneuse système.
+Entrées/sorties de caisse avec reçu généré et ouvert automatiquement (jamais de paiement
+sans reçu — BR-007), journal filtrable avec annulation (opération inverse — jamais de
+suppression, BR-005), comptes de scolarité par tranche, liste des arriérés, rapports
+financiers par période avec export PDF.
 Voir `implementation_plan.md` (fourni séparément) pour le détail des phases suivantes.
 
 > **Pas de nouvelle migration requise** pour cette phase (aucune colonne/table ajoutée).
@@ -137,14 +137,18 @@ src/
 │   │   ├── auth.ipc.ts         # login, logout, getCurrentUser, changePassword
 │   │   ├── settings.ipc.ts      # Années scolaires, classes, barèmes, établissement
 │   │   ├── students.ipc.ts       # Inscription, recherche, parcours, passage de classe
-│   │   ├── printer.ipc.ts         # openPdf (visionneuse système) — thermique en Phase 9
-│   │   └── *.ipc.ts                 # Squelettes restants (cashbox, personnel)
+│   │   ├── cashbox.ipc.ts         # Entrées/sorties, journal, annulation, comptes, rapports
+│   │   ├── printer.ipc.ts          # openPdf (visionneuse système) — thermique en Phase 9
+│   │   └── *.ipc.ts                  # Squelette restant (personnel)
 │   ├── services/
 │   │   ├── audit.service.ts      # Traçabilité des actions (AUDIT_LOG)
 │   │   ├── matricule.service.ts   # Génération de matricules uniques (BR-002)
 │   │   ├── auth.service.ts         # Login, session en mémoire, changement de mot de passe
 │   │   ├── settings.service.ts      # Années scolaires, classes, barèmes, établissement
-│   │   └── student.service.ts        # CRUD élève, recherche, parcours, passage de classe
+│   │   ├── student.service.ts        # CRUD élève, recherche, parcours, passage de classe
+│   │   ├── cashbox.service.ts         # Entrées/sorties, journal, annulation, solde, rapports
+│   │   ├── tuition.service.ts          # Comptes de scolarité, arriérés (BR-010)
+│   │   └── receipt.service.ts           # Numérotation et suivi des reçus (BR-007)
 │   └── index.ts
 ├── preload/         # Scripts preload (contextBridge)
 │   ├── index.ts       # Implémentation complète, organisée par domaine
@@ -158,15 +162,16 @@ src/
 │   │   ├── auth/              # ChangePasswordDialog
 │   │   ├── forms/            # FormField, MoneyInput, DatePickerField, SearchInput, ImageUpload
 │   │   └── data-table/        # DataTable générique (tri + pagination), Toolbar
-│   ├── hooks/               # useDebounce, useStudents
-│   ├── stores/               # auth.store, settings.store, students.store (Zustand)
-│   ├── lib/                  # cn, use-toast, ipc, formatters, validators (Zod), pdf
-│   ├── pdf/                   # Templates @react-pdf/renderer (attestation, certificat,
-│   │                             fiche élève, liste de classe) + styles/en-tête partagés
+│   ├── hooks/               # useDebounce, useStudents, useCashbox
+│   ├── stores/               # auth.store, settings.store, students.store, cashbox.store
+│   ├── lib/                  # cn, use-toast, ipc, formatters, validators, pdf, numberToWords
+│   ├── pdf/                   # Templates @react-pdf/renderer (attestation, certificat, fiche,
+│   │                             liste de classe, reçu, rapport financier, liste des arriérés)
 │   ├── pages/
 │   │   ├── settings/           # SettingsPage (onglets), SchoolYearPage, TuitionFeesPage, SchoolInfoPage
 │   │   ├── students/            # Liste, inscription, fiche détail, passage de classe
-│   │   └── ...                    # auth, dashboard, cashbox, personnel
+│   │   ├── cashbox/               # Journal, nouvelle opération, comptes/arriérés, rapports
+│   │   └── ...                      # auth, dashboard, personnel
 │   ├── styles/                 # globals.css (design system)
 │   ├── App.tsx                  # Routing (HashRouter, AuthGuard, 14 routes)
 │   ├── main.tsx
@@ -195,5 +200,4 @@ resources/
 
 ## Prochaine étape
 
-**Phase 7 — Module Caisse** (journal des opérations, reçus, comptes de scolarité,
-rapports, gestion des arriérés).
+**Phase 8 — Module Personnel** (liste des employés, suivi mensuel des salaires payé/non-payé).

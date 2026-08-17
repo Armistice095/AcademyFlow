@@ -26,4 +26,8 @@ export function registerAuthIpcHandlers(): void {
       authService.changePassword(session.userId, oldPassword, newPassword)
     }
   )
+
+  ipcMain.handle(IPC_CHANNELS.auth.getUserById, async (_event, userId: string) => {
+    return authService.getUserById(userId)
+  })
 }

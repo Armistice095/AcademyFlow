@@ -45,7 +45,11 @@ const api: AcademyFlowAPI = {
     getStudentAccount: (studentId) =>
       ipcRenderer.invoke(IPC_CHANNELS.cashbox.getStudentAccount, studentId),
     listArrears: () => ipcRenderer.invoke(IPC_CHANNELS.cashbox.listArrears),
-    getReport: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReport, from, to)
+    getReport: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReport, from, to),
+    getReceipt: (transactionId) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReceipt, transactionId),
+    reprintReceipt: (transactionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cashbox.reprintReceipt, transactionId),
+    getBalance: () => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getBalance)
   },
 
   personnel: {
@@ -80,7 +84,8 @@ const api: AcademyFlowAPI = {
     logout: () => ipcRenderer.invoke(IPC_CHANNELS.auth.logout),
     getCurrentUser: () => ipcRenderer.invoke(IPC_CHANNELS.auth.getCurrentUser),
     changePassword: (oldPassword, newPassword) =>
-      ipcRenderer.invoke(IPC_CHANNELS.auth.changePassword, oldPassword, newPassword)
+      ipcRenderer.invoke(IPC_CHANNELS.auth.changePassword, oldPassword, newPassword),
+    getUserById: (userId) => ipcRenderer.invoke(IPC_CHANNELS.auth.getUserById, userId)
   },
 
   printer: {

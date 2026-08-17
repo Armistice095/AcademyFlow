@@ -8,6 +8,7 @@ import {
   Pencil,
   Save,
   Trash2,
+  User,
   UserPlus,
   X
 } from 'lucide-react'
@@ -20,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
 import { FormField } from '@renderer/components/forms/FormField'
 import { DatePickerField } from '@renderer/components/forms/DatePickerField'
+import { ImageUpload } from '@renderer/components/forms/ImageUpload'
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
 import { useToast } from '@renderer/lib/use-toast'
 import { useSettingsStore } from '@renderer/stores/settings.store'
@@ -88,7 +90,8 @@ export function StudentDetailPage(): JSX.Element {
       nationality: student.nationality,
       address: student.address ?? undefined,
       previousSchool: student.previousSchool ?? undefined,
-      status: student.status
+      status: student.status,
+      photoPath: student.photoPath ?? undefined
     })
     setEditMode(true)
   }
@@ -165,7 +168,7 @@ export function StudentDetailPage(): JSX.Element {
   }
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -225,54 +228,78 @@ export function StudentDetailPage(): JSX.Element {
                 </div>
               )}
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CardContent className="flex flex-col gap-5">
               {editMode ? (
-                <>
-                  <FormField label="Nom" htmlFor="edit-lastName">
-                    <Input id="edit-lastName" value={draft.lastName ?? ''} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
-                  </FormField>
-                  <FormField label="Prénom(s)" htmlFor="edit-firstName">
-                    <Input id="edit-firstName" value={draft.firstName ?? ''} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
-                  </FormField>
-                  <FormField label="Sexe" htmlFor="edit-gender">
-                    <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v as Student['gender'] })}>
-                      <SelectTrigger id="edit-gender">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="M">Masculin</SelectItem>
-                        <SelectItem value="F">Féminin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-                  <FormField label="Date de naissance" htmlFor="edit-dob">
-                    <DatePickerField
-                      id="edit-dob"
-                      value={draft.dateOfBirth ?? ''}
-                      onChange={(v) => setDraft({ ...draft, dateOfBirth: v })}
-                    />
-                  </FormField>
-                  <FormField label="Lieu de naissance" htmlFor="edit-pob">
-                    <Input id="edit-pob" value={draft.placeOfBirth ?? ''} onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })} />
-                  </FormField>
-                  <FormField label="Nationalité" htmlFor="edit-nat">
-                    <Input id="edit-nat" value={draft.nationality ?? ''} onChange={(e) => setDraft({ ...draft, nationality: e.target.value })} />
-                  </FormField>
-                  <FormField label="Adresse" htmlFor="edit-addr" className="sm:col-span-2">
-                    <Input id="edit-addr" value={draft.address ?? ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
-                  </FormField>
-                </>
+                <ImageUpload
+                  label="Photo"
+                  value={draft.photoPath ?? null}
+                  onChange={(v) => setDraft({ ...draft, photoPath: v ?? undefined })}
+                />
               ) : (
-                <>
-                  <InfoRow label="Sexe" value={student.gender === 'M' ? 'Masculin' : 'Féminin'} />
-                  <InfoRow label="Date de naissance" value={formatDate(student.dateOfBirth)} />
-                  <InfoRow label="Lieu de naissance" value={student.placeOfBirth ?? '—'} />
-                  <InfoRow label="Nationalité" value={student.nationality} />
-                  <InfoRow label="Adresse" value={student.address ?? '—'} />
-                  <InfoRow label="Classe actuelle" value={currentEnrollment?.className ?? '—'} />
-                  {student.previousSchool && <InfoRow label="École de provenance" value={student.previousSchool} />}
-                </>
+                <div className="flex items-center gap-3">
+                  {student.photoPath ? (
+                    <img
+                      src={student.photoPath}
+                      alt={`${student.firstName} ${student.lastName}`}
+                      className="h-20 w-20 rounded-lg border border-border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-dashed border-input bg-muted">
+                      <User className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
               )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {editMode ? (
+                  <>
+                    <FormField label="Nom" htmlFor="edit-lastName">
+                      <Input id="edit-lastName" value={draft.lastName ?? ''} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
+                    </FormField>
+                    <FormField label="Prénom(s)" htmlFor="edit-firstName">
+                      <Input id="edit-firstName" value={draft.firstName ?? ''} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
+                    </FormField>
+                    <FormField label="Sexe" htmlFor="edit-gender">
+                      <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v as Student['gender'] })}>
+                        <SelectTrigger id="edit-gender">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="M">Masculin</SelectItem>
+                          <SelectItem value="F">Féminin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                    <FormField label="Date de naissance" htmlFor="edit-dob">
+                      <DatePickerField
+                        id="edit-dob"
+                        value={draft.dateOfBirth ?? ''}
+                        onChange={(v) => setDraft({ ...draft, dateOfBirth: v })}
+                      />
+                    </FormField>
+                    <FormField label="Lieu de naissance" htmlFor="edit-pob">
+                      <Input id="edit-pob" value={draft.placeOfBirth ?? ''} onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })} />
+                    </FormField>
+                    <FormField label="Nationalité" htmlFor="edit-nat">
+                      <Input id="edit-nat" value={draft.nationality ?? ''} onChange={(e) => setDraft({ ...draft, nationality: e.target.value })} />
+                    </FormField>
+                    <FormField label="Adresse" htmlFor="edit-addr" className="sm:col-span-2">
+                      <Input id="edit-addr" value={draft.address ?? ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+                    </FormField>
+                  </>
+                ) : (
+                  <>
+                    <InfoRow label="Sexe" value={student.gender === 'M' ? 'Masculin' : 'Féminin'} />
+                    <InfoRow label="Date de naissance" value={formatDate(student.dateOfBirth)} />
+                    <InfoRow label="Lieu de naissance" value={student.placeOfBirth ?? '—'} />
+                    <InfoRow label="Nationalité" value={student.nationality} />
+                    <InfoRow label="Adresse" value={student.address ?? '—'} />
+                    <InfoRow label="Classe actuelle" value={currentEnrollment?.className ?? '—'} />
+                    {student.previousSchool && <InfoRow label="École de provenance" value={student.previousSchool} />}
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
 

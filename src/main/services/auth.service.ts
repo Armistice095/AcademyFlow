@@ -86,6 +86,13 @@ export function getCurrentUser(): AuthUser | null {
   return toAuthUser(user)
 }
 
+/** Résout un utilisateur par son ID (ex: affichage du nom de l'opérateur dans le journal de caisse). */
+export function getUserById(userId: string): AuthUser | null {
+  const db = getDb()
+  const user = db.select().from(users).where(eq(users.id, userId)).get()
+  return user ? toAuthUser(user) : null
+}
+
 /**
  * Change le mot de passe de l'utilisateur `userId`, après vérification de
  * l'ancien mot de passe. Lève le flag `mustChangePassword` (F-004.5).

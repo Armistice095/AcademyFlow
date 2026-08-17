@@ -22,9 +22,11 @@ import type {
   CreateStudentDTO
 } from '@shared/types/student.types'
 import type {
+  ArrearsStudent,
   CashReport,
   CreateTransactionDTO,
   JournalFilters,
+  Receipt,
   Transaction,
   TuitionAccount
 } from '@shared/types/transaction.types'
@@ -81,8 +83,11 @@ export interface AcademyFlowAPI {
     cancelTransaction: (transactionId: string, reason: string) => Promise<Transaction>
     getJournal: (filters: JournalFilters) => Promise<PaginatedResult<Transaction>>
     getStudentAccount: (studentId: string) => Promise<TuitionAccount>
-    listArrears: () => Promise<TuitionAccount[]>
+    listArrears: () => Promise<ArrearsStudent[]>
     getReport: (from: string, to: string) => Promise<CashReport>
+    getReceipt: (transactionId: string) => Promise<Receipt | null>
+    reprintReceipt: (transactionId: string) => Promise<Receipt>
+    getBalance: () => Promise<number>
   }
 
   personnel: {
@@ -111,6 +116,7 @@ export interface AcademyFlowAPI {
     logout: () => Promise<void>
     getCurrentUser: () => Promise<AuthUser | null>
     changePassword: (oldPassword: string, newPassword: string) => Promise<void>
+    getUserById: (userId: string) => Promise<AuthUser | null>
   }
 
   printer: {

@@ -38,7 +38,10 @@ export const IPC_CHANNELS = {
     getJournal: 'cashbox:getJournal',
     getStudentAccount: 'cashbox:getStudentAccount',
     listArrears: 'cashbox:listArrears',
-    getReport: 'cashbox:getReport'
+    getReport: 'cashbox:getReport',
+    getReceipt: 'cashbox:getReceipt',
+    reprintReceipt: 'cashbox:reprintReceipt',
+    getBalance: 'cashbox:getBalance'
   },
 
   /** Complété en Phase 8 — Module Personnel. */
@@ -67,7 +70,8 @@ export const IPC_CHANNELS = {
     login: 'auth:login',
     logout: 'auth:logout',
     getCurrentUser: 'auth:getCurrentUser',
-    changePassword: 'auth:changePassword'
+    changePassword: 'auth:changePassword',
+    getUserById: 'auth:getUserById'
   },
 
   printer: {
