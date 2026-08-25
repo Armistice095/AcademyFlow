@@ -158,6 +158,21 @@ export function saveTuitionSchedule(data: SaveTuitionScheduleDTO): TuitionSchedu
   return result
 }
 
+/**
+ * Résout le libellé d'une tranche de scolarité par son ID (utilisé par
+ * l'impression thermique — Phase 9.2 — pour afficher le détail de la tranche
+ * sur le reçu, sans devoir recharger tout le barème).
+ */
+export function getInstallmentLabel(installmentId: string): string | null {
+  const db = getDb()
+  const row = db
+    .select({ label: tuitionInstallments.label })
+    .from(tuitionInstallments)
+    .where(eq(tuitionInstallments.id, installmentId))
+    .get()
+  return row?.label ?? null
+}
+
 // ---------------------------------------------------------------------------
 // Informations de l'établissement (singleton — personnalisation des documents)
 // ---------------------------------------------------------------------------

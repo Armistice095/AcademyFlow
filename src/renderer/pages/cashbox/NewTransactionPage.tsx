@@ -12,6 +12,7 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useDebounce } from '@renderer/hooks/useDebounce'
 import { api } from '@renderer/lib/ipc'
 import { openPdf } from '@renderer/lib/pdf'
+import { printReceiptWithFallback } from '@renderer/lib/print'
 import { ReceiptPDF } from '@renderer/pdf/ReceiptPDF'
 import { formatCFA } from '@renderer/lib/formatters'
 import { cn } from '@renderer/lib/utils'
@@ -135,23 +136,25 @@ export function NewTransactionPage(): JSX.Element {
       if (type === 'entry') {
         const receipt = await api.cashbox.getReceipt(transaction.id)
         if (receipt) {
-          const [schoolInfo, operator] = await Promise.all([
-            api.settings.getSchoolInfo(),
-            api.auth.getCurrentUser()
-          ])
-          await openPdf(
-            <ReceiptPDF
-              receipt={receipt}
-              transaction={transaction}
-              student={selectedStudent}
-              installmentLabel={selectedInstallment?.label ?? null}
-              operatorName={operator?.fullName ?? '—'}
-              schoolInfo={schoolInfo}
-            />,
-            `recu-${receipt.receiptNumber}.pdf`
-          )
+          await printReceiptWithFallback(receipt.id, async () => {
+            const [schoolInfo, operator] = await Promise.all([
+              api.settings.getSchoolInfo(),
+              api.auth.getCurrentUser()
+            ])
+            await openPdf(
+              <ReceiptPDF
+                receipt={receipt}
+                transaction={transaction}
+                student={selectedStudent}
+                installmentLabel={selectedInstallment?.label ?? null}
+                operatorName={operator?.fullName ?? '—'}
+                schoolInfo={schoolInfo}
+              />,
+              `recu-${receipt.receiptNumber}.pdf`
+            )
+          })
         }
-        toast({ title: 'Entrée enregistrée', description: 'Le reçu a été généré et ouvert.' })
+        toast({ title: 'Entrée enregistrée', description: 'Le reçu a été imprimé.' })
       } else {
         toast({ title: 'Sortie enregistrée' })
       }

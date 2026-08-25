@@ -1,5 +1,6 @@
+import { desc, eq } from 'drizzle-orm'
 import { getDb } from '@main/database'
-import { auditLog } from '@main/database/schema'
+import { auditLog, users } from '@main/database/schema'
 
 export interface LogActionParams {
   userId: string
@@ -30,4 +31,47 @@ export function logAction(params: LogActionParams): void {
       details: params.details !== undefined ? JSON.stringify(params.details) : null
     })
     .run()
+}
+
+export interface RecentAuditEntry {
+  id: string
+  userId: string
+  userFullName: string
+  action: string
+  entityType: string
+  entityId: string
+  /** JSON désérialisé (voir `LogActionParams.details`), ou `null`. */
+  details: unknown
+  createdAt: string
+}
+
+/**
+ * Dernières entrées du journal d'audit, du plus récent au plus ancien, avec
+ * le nom complet de l'opérateur déjà résolu (flux « Activités récentes » du
+ * tableau de bord — F-019, Phase 9.1).
+ */
+export function listRecent(limit = 10): RecentAuditEntry[] {
+  const db = getDb()
+
+  const rows = db
+    .select({
+      id: auditLog.id,
+      userId: auditLog.userId,
+      userFullName: users.fullName,
+      action: auditLog.action,
+      entityType: auditLog.entityType,
+      entityId: auditLog.entityId,
+      details: auditLog.details,
+      createdAt: auditLog.createdAt
+    })
+    .from(auditLog)
+    .innerJoin(users, eq(users.id, auditLog.userId))
+    .orderBy(desc(auditLog.createdAt))
+    .limit(limit)
+    .all()
+
+  return rows.map((row) => ({
+    ...row,
+    details: row.details ? (JSON.parse(row.details) as unknown) : null
+  }))
 }

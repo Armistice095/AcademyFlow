@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, User, Users } from 'lucide-react'
+import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, Upload, User } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
@@ -14,19 +14,20 @@ import {
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
 import { DataTable } from '@renderer/components/data-table/DataTable'
 import { DataTableToolbar } from '@renderer/components/data-table/DataTableToolbar'
-import { useStudents } from '@renderer/hooks/useStudents'
+import { StudentStatsCards } from './components/StudentStatsCards'
+import { useStudents, useStudentStats } from '@renderer/hooks/useStudents'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useStudentsStore } from '@renderer/stores/students.store'
 import { useToast } from '@renderer/lib/use-toast'
 import { api } from '@renderer/lib/ipc'
 import { openPdf } from '@renderer/lib/pdf'
+import { formatDateShort } from '@renderer/lib/formatters'
 import { ClassListPDF } from '@renderer/pdf/ClassListPDF'
 import type { StudentListItem } from '@shared/types/student.types'
 
 const STATUS_LABELS: Record<string, string> = {
   nouveau: 'Nouveau',
-  redoublant: 'Redoublant',
-  transféré: 'Transféré'
+  redoublant: 'Redoublant'
 }
 
 export function StudentsListPage(): JSX.Element {
@@ -50,11 +51,16 @@ export function StudentsListPage(): JSX.Element {
     schoolYearId: currentSchoolYear?.id
   })
 
+  const { stats } = useStudentStats({
+    classId: classId === 'all' ? undefined : classId,
+    schoolYearId: currentSchoolYear?.id
+  })
+
   const columns = useMemo<ColumnDef<StudentListItem>[]>(
     () => [
       {
         id: 'photo',
-        header: '',
+        header: 'Photo',
         cell: ({ row }) =>
           row.original.photoPath ? (
             <img
@@ -68,16 +74,33 @@ export function StudentsListPage(): JSX.Element {
             </div>
           )
       },
-      { accessorKey: 'matricule', header: 'Matricule' },
       {
         id: 'name',
-        header: 'Nom et prénom(s)',
-        accessorFn: (row) => `${row.lastName} ${row.firstName}`
+        header: 'Élève',
+        accessorFn: (row) => `${row.lastName} ${row.firstName}`,
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">
+              {row.original.lastName} {row.original.firstName}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">ID: {row.original.matricule}</p>
+          </div>
+        )
       },
       {
         accessorKey: 'gender',
         header: 'Sexe',
         cell: ({ row }) => (row.original.gender === 'M' ? 'M' : 'F')
+      },
+      {
+        accessorKey: 'dateOfBirth',
+        header: 'Date de naissance',
+        cell: ({ row }) => (row.original.dateOfBirth ? formatDateShort(row.original.dateOfBirth) : '—')
+      },
+      {
+        id: 'placeOfBirth',
+        header: 'Lieu de naissance',
+        accessorFn: (row) => row.placeOfBirth ?? '—'
       },
       {
         id: 'className',
@@ -135,6 +158,13 @@ export function StudentsListPage(): JSX.Element {
     await refresh()
   }
 
+  const handleImport = (): void => {
+    toast({
+      title: 'Fonctionnalité en cours de construction',
+      description: "L'import d'élèves sera bientôt disponible."
+    })
+  }
+
   const handleExportClassList = async (): Promise<void> => {
     if (classId === 'all' || !currentSchoolYear || !results) return
     setExporting(true)
@@ -159,17 +189,7 @@ export function StudentsListPage(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Users className="h-4 w-4" />
-          {results ? `${results.total} élève${results.total > 1 ? 's' : ''}` : '...'}
-          {currentSchoolYear && ` — Année ${currentSchoolYear.label}`}
-        </div>
-        <Button onClick={() => navigate('/students/new')} className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          Nouvel élève
-        </Button>
-      </div>
+      <StudentStatsCards stats={stats} />
 
       <DataTableToolbar
         onSearch={setQuery}
@@ -190,12 +210,22 @@ export function StudentsListPage(): JSX.Element {
           </Select>
         }
         action={
-          classId !== 'all' && (
-            <Button variant="outline" onClick={handleExportClassList} disabled={exporting} className="gap-1.5">
-              <FileDown className="h-4 w-4" />
-              {exporting ? 'Export...' : 'Exporter la liste'}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleImport} className="gap-1.5">
+              <Upload className="h-4 w-4" />
+              Importer
             </Button>
-          )
+            {classId !== 'all' && (
+              <Button variant="outline" onClick={handleExportClassList} disabled={exporting} className="gap-1.5">
+                <FileDown className="h-4 w-4" />
+                {exporting ? 'Export...' : 'Exporter la liste'}
+              </Button>
+            )}
+            <Button onClick={() => navigate('/students/new')} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Nouvel élève
+            </Button>
+          </div>
         }
       />
 

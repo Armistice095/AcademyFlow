@@ -3,10 +3,10 @@ import type { SearchQuery } from './common.types'
 export type Gender = 'M' | 'F'
 
 /** Statut administratif de la fiche élève. */
-export type StudentStatus = 'nouveau' | 'redoublant' | 'transféré'
+export type StudentStatus = 'nouveau' | 'redoublant'
 
 /** Statut de progression pour une inscription donnée (BR-003). */
-export type EnrollmentStatus = 'admis' | 'redoublant' | 'transféré'
+export type EnrollmentStatus = 'admis' | 'redoublant'
 
 // ---------------------------------------------------------------------------
 // Responsable / tuteur
@@ -81,6 +81,38 @@ export type UpdateStudentDTO = Partial<Omit<CreateStudentDTO, 'guardians' | 'cla
 export interface StudentSearchQuery extends SearchQuery {
   classId?: string
   schoolYearId?: string
+}
+
+// ---------------------------------------------------------------------------
+// Statistiques (cartes KPI de la liste des élèves)
+// ---------------------------------------------------------------------------
+
+/** Filtre optionnel classe/année pour le calcul des statistiques. */
+export interface StudentStatsQuery {
+  classId?: string
+  schoolYearId?: string
+}
+
+/** Valeur courante + valeur de l'année précédente, pour affichage d'une tendance. */
+export interface StudentStatsTrend {
+  current: number
+  previous: number
+  /** `null` si l'année précédente n'existe pas ou comptait 0 élève (comparaison non pertinente). */
+  growthPct: number | null
+}
+
+export interface StudentGenderStat {
+  count: number
+  /** Pourcentage de l'effectif total (0 si l'effectif est nul). */
+  percentage: number
+}
+
+export interface StudentStats {
+  total: StudentStatsTrend
+  anciens: StudentStatsTrend
+  nouveaux: StudentStatsTrend
+  male: StudentGenderStat
+  female: StudentGenderStat
 }
 
 /**

@@ -1,28 +1,28 @@
 import { create } from 'zustand'
 import { api } from '@renderer/lib/ipc'
 import type { PaginatedResult } from '@shared/types/common.types'
-import type { JournalFilters, Transaction } from '@shared/types/transaction.types'
+import type { CashboxStats, JournalFilters, JournalTransaction } from '@shared/types/transaction.types'
 
 interface CashboxState {
-  balance: number
-  journal: PaginatedResult<Transaction> | null
+  stats: CashboxStats | null
+  journal: PaginatedResult<JournalTransaction> | null
   isLoading: boolean
   lastFilters: JournalFilters
 
-  loadBalance: () => Promise<void>
+  loadStats: (schoolYearId?: string) => Promise<void>
   loadJournal: (filters: JournalFilters) => Promise<void>
   refresh: () => Promise<void>
 }
 
 export const useCashboxStore = create<CashboxState>((set, get) => ({
-  balance: 0,
+  stats: null,
   journal: null,
   isLoading: false,
   lastFilters: {},
 
-  loadBalance: async () => {
-    const balance = await api.cashbox.getBalance()
-    set({ balance })
+  loadStats: async (schoolYearId) => {
+    const stats = await api.cashbox.getStats(schoolYearId)
+    set({ stats })
   },
 
   loadJournal: async (filters) => {
@@ -36,6 +36,7 @@ export const useCashboxStore = create<CashboxState>((set, get) => ({
   },
 
   refresh: async () => {
-    await Promise.all([get().loadBalance(), get().loadJournal(get().lastFilters)])
+    const filters = get().lastFilters
+    await Promise.all([get().loadStats(filters.schoolYearId), get().loadJournal(filters)])
   }
 }))

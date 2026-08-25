@@ -1,14 +1,16 @@
-import { and, desc, eq, gte, like, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lte, or, type SQL } from 'drizzle-orm'
 import { getDb } from '@main/database'
-import { students, transactions } from '@main/database/schema'
+import { schoolYears, students, transactions } from '@main/database/schema'
 import { generateId } from '@main/database/id'
 import { insertReceipt } from './receipt.service'
 import { logAction } from './audit.service'
 import { CASH_ENTRY_CATEGORIES, CASH_EXIT_CATEGORIES, type CashCategory } from '@shared/constants/categories'
 import type {
+  CashboxStats,
   CashReport,
   CreateTransactionDTO,
   JournalFilters,
+  JournalTransaction,
   Receipt,
   Transaction
 } from '@shared/types/transaction.types'
@@ -31,9 +33,31 @@ function toTransaction(row: typeof transactions.$inferSelect): Transaction {
     employeeId: row.employeeId,
     status: row.status as Transaction['status'],
     cancelledByTxn: row.cancelledByTxn,
+    cancelReason: row.cancelReason,
     userId: row.userId,
+    schoolYearId: row.schoolYearId,
     createdAt: row.createdAt
   }
+}
+
+/** Année scolaire active — assignée automatiquement à chaque nouvelle opération de caisse. */
+function getCurrentSchoolYearIdOrNull(): string | null {
+  const db = getDb()
+  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(eq(schoolYears.isCurrent, true)).get()
+  return year?.id ?? null
+}
+
+/**
+ * Borne d'une journée locale (00:00 → 23:59:59.999), convertie en UTC.
+ * IMPORTANT : `createdAt` est stocké en ISO 8601 UTC — construire la borne à
+ * partir d'un objet Date (plutôt que de concaténer une chaîne "YYYY-MM-DD")
+ * garantit une conversion correcte du fuseau local vers l'UTC, sinon les
+ * opérations du début de journée (avant le décalage UTC) sont exclues à tort.
+ */
+function todayRange(now: Date): { from: string; to: string } {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  return { from: start.toISOString(), to: end.toISOString() }
 }
 
 export interface CreateTransactionInput extends CreateTransactionDTO {
@@ -64,6 +88,7 @@ export function createEntry(data: CreateTransactionInput): { transaction: Transa
 
   const db = getDb()
   const transactionId = generateId()
+  const schoolYearId = getCurrentSchoolYearIdOrNull()
 
   const result = db.transaction((tx) => {
     tx.insert(transactions)
@@ -77,7 +102,8 @@ export function createEntry(data: CreateTransactionInput): { transaction: Transa
         installmentId: data.installmentId ?? null,
         employeeId: data.employeeId ?? null,
         status: 'validated',
-        userId: data.userId
+        userId: data.userId,
+        schoolYearId
       })
       .run()
 
@@ -111,6 +137,7 @@ export function createExit(data: CreateTransactionInput): Transaction {
 
   const db = getDb()
   const transactionId = generateId()
+  const schoolYearId = getCurrentSchoolYearIdOrNull()
 
   db.insert(transactions)
     .values({
@@ -123,7 +150,8 @@ export function createExit(data: CreateTransactionInput): Transaction {
       installmentId: data.installmentId ?? null,
       employeeId: data.employeeId ?? null,
       status: 'validated',
-      userId: data.userId
+      userId: data.userId,
+      schoolYearId
     })
     .run()
 
@@ -142,8 +170,13 @@ export function createTransaction(
 }
 
 // ---------------------------------------------------------------------------
-// Annulation (BR-005) — jamais de suppression, uniquement opération inverse
+// Annulation (BR-005) — jamais de suppression, uniquement marquage "annulée"
 // ---------------------------------------------------------------------------
+//
+// L'opération annulée reste visible dans le journal (barrée, badge "Annulée",
+// motif conservé) mais elle est retirée une seule fois du solde de caisse —
+// aucune ligne supplémentaire n'est créée, pour éviter de compter l'annulation
+// deux fois (une fois par exclusion de l'originale, une fois par l'inverse).
 
 export function cancelTransaction(transactionId: string, reason: string, userId: string): Transaction {
   if (!reason.trim()) {
@@ -160,37 +193,17 @@ export function cancelTransaction(transactionId: string, reason: string, userId:
     throw new Error('Cette opération a déjà été annulée.')
   }
 
-  const reversalId = generateId()
-  const reversalType = original.type === 'entry' ? 'exit' : 'entry'
-
-  db.transaction((tx) => {
-    tx.insert(transactions)
-      .values({
-        id: reversalId,
-        type: reversalType,
-        category: original.category,
-        description: `Annulation de l'opération du ${original.createdAt} — motif : ${reason.trim()}`,
-        amount: original.amount,
-        studentId: original.studentId,
-        installmentId: original.installmentId,
-        employeeId: original.employeeId,
-        status: 'validated',
-        userId
-      })
-      .run()
-
-    tx.update(transactions)
-      .set({ status: 'cancelled', cancelledByTxn: reversalId })
-      .where(eq(transactions.id, transactionId))
-      .run()
-  })
+  db.update(transactions)
+    .set({ status: 'cancelled', cancelReason: reason.trim() })
+    .where(eq(transactions.id, transactionId))
+    .run()
 
   logAction({
     userId,
     action: 'cancel',
     entityType: 'transaction',
     entityId: transactionId,
-    details: { reason, reversalId }
+    details: { reason: reason.trim() }
   })
 
   const updated = db.select().from(transactions).where(eq(transactions.id, transactionId)).get()
@@ -198,16 +211,45 @@ export function cancelTransaction(transactionId: string, reason: string, userId:
   return toTransaction(updated)
 }
 
+/** Résout une opération par son ID (utilisé par l'impression thermique — Phase 9.2). */
+export function getTransactionById(transactionId: string): Transaction | null {
+  const db = getDb()
+  const row = db.select().from(transactions).where(eq(transactions.id, transactionId)).get()
+  return row ? toTransaction(row) : null
+}
+
 // ---------------------------------------------------------------------------
 // Journal (F-015, F-016)
 // ---------------------------------------------------------------------------
 
-export function getJournal(filters: JournalFilters): PaginatedResult<Transaction> {
+export function getJournal(filters: JournalFilters): PaginatedResult<JournalTransaction> {
   const db = getDb()
   const page = filters.page && filters.page > 0 ? filters.page : 1
   const pageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : DEFAULT_PAGE_SIZE
 
-  const conditions = []
+  // Le solde cumulé (F-015) se calcule sur l'ensemble des opérations de
+  // l'année scolaire, indépendamment des filtres appliqués à l'affichage —
+  // c'est un solde réel de caisse, pas une somme filtrée.
+  const balanceAfterByTxnId = new Map<string, number>()
+  if (filters.schoolYearId) {
+    const allYearRows = db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.schoolYearId, filters.schoolYearId))
+      .orderBy(transactions.createdAt, transactions.id)
+      .all()
+
+    let running = 0
+    for (const row of allYearRows) {
+      if (row.status === 'validated') {
+        running += row.type === 'entry' ? row.amount : -row.amount
+      }
+      balanceAfterByTxnId.set(row.id, running)
+    }
+  }
+
+  const conditions: SQL<unknown>[] = []
+  if (filters.schoolYearId) conditions.push(eq(transactions.schoolYearId, filters.schoolYearId))
   if (filters.type) conditions.push(eq(transactions.type, filters.type))
   if (filters.category) conditions.push(eq(transactions.category, filters.category))
   if (filters.userId) conditions.push(eq(transactions.userId, filters.userId))
@@ -244,22 +286,60 @@ export function getJournal(filters: JournalFilters): PaginatedResult<Transaction
   const total = rows.length
   const paged = rows.slice((page - 1) * pageSize, page * pageSize)
 
-  return { items: paged.map(toTransaction), total, page, pageSize }
+  return {
+    items: paged.map((row) => ({ ...toTransaction(row), balanceAfter: balanceAfterByTxnId.get(row.id) ?? 0 })),
+    total,
+    page,
+    pageSize
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Solde et rapports (F-017, F-019)
 // ---------------------------------------------------------------------------
 
-export function getBalance(): number {
+export function getBalance(schoolYearId?: string): number {
   const db = getDb()
+  const conditions: SQL<unknown>[] = [eq(transactions.status, 'validated')]
+  if (schoolYearId) conditions.push(eq(transactions.schoolYearId, schoolYearId))
+
   const rows = db
     .select({ type: transactions.type, amount: transactions.amount })
     .from(transactions)
-    .where(eq(transactions.status, 'validated'))
+    .where(and(...conditions))
     .all()
 
   return rows.reduce((sum, row) => sum + (row.type === 'entry' ? row.amount : -row.amount), 0)
+}
+
+/** Cartes KPI du journal de caisse (F-015) — bornées à l'année scolaire en cours. */
+export function getStats(schoolYearId?: string): CashboxStats {
+  const db = getDb()
+  const { from, to } = todayRange(new Date())
+
+  const balance = getBalance(schoolYearId)
+
+  const todayConditions: SQL<unknown>[] = [
+    eq(transactions.status, 'validated'),
+    gte(transactions.createdAt, from),
+    lte(transactions.createdAt, to)
+  ]
+  if (schoolYearId) todayConditions.push(eq(transactions.schoolYearId, schoolYearId))
+
+  const todayRows = db
+    .select({ type: transactions.type, amount: transactions.amount })
+    .from(transactions)
+    .where(and(...todayConditions))
+    .all()
+
+  let todayEntries = 0
+  let todayExits = 0
+  for (const row of todayRows) {
+    if (row.type === 'entry') todayEntries += row.amount
+    else todayExits += row.amount
+  }
+
+  return { balance, todayEntries, todayExits }
 }
 
 export function getReport(from: string, to: string): CashReport {

@@ -19,6 +19,9 @@ const api: AcademyFlowAPI = {
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.students.delete, id),
     findById: (id) => ipcRenderer.invoke(IPC_CHANNELS.students.findById, id),
     search: (query) => ipcRenderer.invoke(IPC_CHANNELS.students.search, query),
+    getStats: (query) => ipcRenderer.invoke(IPC_CHANNELS.students.getStats, query),
+    listEnrollmentClassNames: (schoolYearId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.students.listEnrollmentClassNames, schoolYearId),
     listByClass: (classId, schoolYearId) =>
       ipcRenderer.invoke(IPC_CHANNELS.students.listByClass, classId, schoolYearId),
     addGuardian: (studentId, data) =>
@@ -46,10 +49,12 @@ const api: AcademyFlowAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.cashbox.getStudentAccount, studentId),
     listArrears: () => ipcRenderer.invoke(IPC_CHANNELS.cashbox.listArrears),
     getReport: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReport, from, to),
-    getReceipt: (transactionId) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReceipt, transactionId),
+    getReceipt: (transactionId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReceipt, transactionId),
     reprintReceipt: (transactionId) =>
       ipcRenderer.invoke(IPC_CHANNELS.cashbox.reprintReceipt, transactionId),
-    getBalance: () => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getBalance)
+    getBalance: (schoolYearId) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getBalance, schoolYearId),
+    getStats: (schoolYearId) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getStats, schoolYearId)
   },
 
   personnel: {
@@ -57,17 +62,19 @@ const api: AcademyFlowAPI = {
     update: (id, data) => ipcRenderer.invoke(IPC_CHANNELS.personnel.update, id, data),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.personnel.delete, id),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.personnel.list),
+    getById: (id) => ipcRenderer.invoke(IPC_CHANNELS.personnel.getById, id),
     markSalaryPaid: (employeeId, month, year) =>
       ipcRenderer.invoke(IPC_CHANNELS.personnel.markSalaryPaid, employeeId, month, year),
     getSalaryStatus: (month, year) =>
-      ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryStatus, month, year)
+      ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryStatus, month, year),
+    getSalaryHistory: (employeeId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryHistory, employeeId)
   },
 
   settings: {
     getCurrentSchoolYear: () => ipcRenderer.invoke(IPC_CHANNELS.settings.getCurrentSchoolYear),
     listSchoolYears: () => ipcRenderer.invoke(IPC_CHANNELS.settings.listSchoolYears),
-    createSchoolYear: (label) =>
-      ipcRenderer.invoke(IPC_CHANNELS.settings.createSchoolYear, label),
+    createSchoolYear: (label) => ipcRenderer.invoke(IPC_CHANNELS.settings.createSchoolYear, label),
     setCurrentSchoolYear: (yearId) =>
       ipcRenderer.invoke(IPC_CHANNELS.settings.setCurrentSchoolYear, yearId),
     getClasses: () => ipcRenderer.invoke(IPC_CHANNELS.settings.getClasses),
@@ -85,18 +92,38 @@ const api: AcademyFlowAPI = {
     getCurrentUser: () => ipcRenderer.invoke(IPC_CHANNELS.auth.getCurrentUser),
     changePassword: (oldPassword, newPassword) =>
       ipcRenderer.invoke(IPC_CHANNELS.auth.changePassword, oldPassword, newPassword),
-    getUserById: (userId) => ipcRenderer.invoke(IPC_CHANNELS.auth.getUserById, userId)
+    getUserById: (userId) => ipcRenderer.invoke(IPC_CHANNELS.auth.getUserById, userId),
+    listUsers: () => ipcRenderer.invoke(IPC_CHANNELS.auth.listUsers),
+    createUser: (data) => ipcRenderer.invoke(IPC_CHANNELS.auth.createUser, data),
+    updateUser: (userId, data) => ipcRenderer.invoke(IPC_CHANNELS.auth.updateUser, userId, data),
+    setUserActive: (userId, isActive) =>
+      ipcRenderer.invoke(IPC_CHANNELS.auth.setUserActive, userId, isActive),
+    resetPassword: (userId) => ipcRenderer.invoke(IPC_CHANNELS.auth.resetPassword, userId)
   },
 
   printer: {
     printReceipt: (receiptId) => ipcRenderer.invoke(IPC_CHANNELS.printer.printReceipt, receiptId),
     testConnection: () => ipcRenderer.invoke(IPC_CHANNELS.printer.testConnection),
-    openPdf: (base64, fileName) => ipcRenderer.invoke(IPC_CHANNELS.printer.openPdf, base64, fileName)
+    openPdf: (base64, fileName) =>
+      ipcRenderer.invoke(IPC_CHANNELS.printer.openPdf, base64, fileName),
+    getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.printer.getConfig),
+    updateConfig: (data) => ipcRenderer.invoke(IPC_CHANNELS.printer.updateConfig, data),
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.printer.getStatus)
   },
 
   backup: {
     exportToCloud: () => ipcRenderer.invoke(IPC_CHANNELS.backup.exportToCloud),
-    getLastBackup: () => ipcRenderer.invoke(IPC_CHANNELS.backup.getLastBackup)
+    getLastBackup: () => ipcRenderer.invoke(IPC_CHANNELS.backup.getLastBackup),
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.backup.getStatus),
+    listBackups: () => ipcRenderer.invoke(IPC_CHANNELS.backup.listBackups),
+    restoreFromCloud: (backupId) => ipcRenderer.invoke(IPC_CHANNELS.backup.restoreFromCloud, backupId),
+    connectGoogleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.backup.connectGoogleAccount),
+    disconnectGoogleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.backup.disconnectGoogleAccount),
+    updateSettings: (data) => ipcRenderer.invoke(IPC_CHANNELS.backup.updateSettings, data)
+  },
+
+  dashboard: {
+    getStats: () => ipcRenderer.invoke(IPC_CHANNELS.dashboard.getStats)
   }
 }
 

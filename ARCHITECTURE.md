@@ -446,7 +446,11 @@ erDiagram
 ```
 
 - Communication via `node-thermal-printer` (protocole ESC/POS).
-- Connexion USB (la plus courante au Bénin) ou réseau.
+- Connexion USB (la plus courante au Bénin) ou réseau. Note d'implémentation :
+  seules les interfaces pures JavaScript de `node-thermal-printer` sont
+  utilisées (`tcp://` pour le réseau, port/fichier local type `\\.\COM3`
+  pour l'USB) — aucune dépendance native supplémentaire n'est introduite,
+  ce qui évite tout risque de compilation cassée au packaging (§10).
 - Template de reçu formaté pour papier 80mm :
   - En-tête : nom de l'école, logo (si supporté), adresse.
   - Corps : nom élève, classe, type de paiement, montant, détail des tranches.
@@ -475,11 +479,17 @@ erDiagram
                                      └──────────────┘
 ```
 
-- Sauvegarde du fichier SQLite complet (après checkpoint WAL) vers Google Drive.
-- Authentification OAuth2 via le navigateur système (première configuration).
+- Sauvegarde du fichier SQLite complet (après checkpoint WAL, compressé en gzip) vers Google Drive.
+- Authentification OAuth2 via le navigateur système (flux "installed app" : serveur
+  HTTP loopback local `127.0.0.1` + PKCE, portée `drive.file` — l'application
+  ne voit que ses propres fichiers). Jeton de rafraîchissement chiffré via
+  `safeStorage` avant persistance. Identifiant d'application (Client ID/Secret)
+  fourni par variables d'environnement développeur — voir `.env.example`.
 - Fréquence configurable : quotidienne par défaut, déclenchable manuellement.
 - Conservation des 7 dernières sauvegardes (rotation automatique).
-- Restauration possible depuis les Paramètres.
+- Restauration possible depuis les Paramètres : copie de sécurité locale de
+  l'état actuel avant remplacement, puis redémarrage complet de l'application
+  (une connexion SQLite ouverte ne peut pas être remplacée à chaud).
 
 ---
 

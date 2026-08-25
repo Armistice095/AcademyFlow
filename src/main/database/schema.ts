@@ -29,6 +29,8 @@ export const users = sqliteTable('USERS', {
   fullName: text('full_name').notNull(),
   /** Force le changement de mot de passe au prochain login (voir F-004.5). */
   mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(true),
+  /** Désactivation d'un compte sans suppression physique (Phase 9.4 — cohérent avec BR-006). */
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull().$defaultFn(nowIso),
   lastLogin: text('last_login')
 }, (table) => ({
@@ -103,7 +105,7 @@ export const students = sqliteTable('STUDENTS', {
   address: text('address'),
   /** Renseigné si l'élève est un transfert. */
   previousSchool: text('previous_school'),
-  /** 'nouveau' | 'redoublant' | 'transféré' */
+  /** 'nouveau' | 'redoublant' */
   status: text('status').notNull().default('nouveau'),
   /** BR-006 : soft delete — jamais de suppression physique. */
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
@@ -147,7 +149,7 @@ export const enrollments = sqliteTable('ENROLLMENTS', {
   classId: text('class_id')
     .notNull()
     .references(() => classes.id, { onDelete: 'restrict' }),
-  /** 'admis' | 'redoublant' | 'transféré' */
+  /** 'admis' | 'redoublant' */
   status: text('status').notNull(),
   createdAt: text('created_at').notNull().$defaultFn(nowIso)
 }, (table) => ({
@@ -213,18 +215,25 @@ export const transactions = sqliteTable('TRANSACTIONS', {
     onDelete: 'set null'
   }),
   employeeId: text('employee_id').references(() => employees.id, { onDelete: 'set null' }),
-  /** 'validated' | 'cancelled' — BR-005 : jamais de suppression, uniquement annulation. */
+  /** 'validated' | 'cancelled' — BR-005 : jamais de suppression, uniquement marquage "annulée". */
   status: text('status').notNull().default('validated'),
   /** Référence l'opération d'annulation associée, le cas échéant. */
   cancelledByTxn: text('cancelled_by_txn'),
+  /** Motif saisi par l'opérateur lors de l'annulation (BR-005 : conservé sur l'opération elle-même,
+   *  aucune ligne supplémentaire n'est créée dans le journal). */
+  cancelReason: text('cancel_reason'),
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'restrict' }),
+  /** Année scolaire en cours au moment de l'enregistrement — permet de filtrer
+   *  le journal de caisse par année scolaire (cohérent avec ENROLLMENTS). */
+  schoolYearId: text('school_year_id').references(() => schoolYears.id, { onDelete: 'restrict' }),
   createdAt: text('created_at').notNull().$defaultFn(nowIso)
 }, (table) => ({
   createdAtIdx: index('transactions_created_at_idx').on(table.createdAt),
   studentIdx: index('transactions_student_idx').on(table.studentId),
-  typeIdx: index('transactions_type_idx').on(table.type)
+  typeIdx: index('transactions_type_idx').on(table.type),
+  schoolYearIdx: index('transactions_school_year_idx').on(table.schoolYearId)
 }))
 
 // ---------------------------------------------------------------------------
@@ -243,6 +252,69 @@ export const receipts = sqliteTable('RECEIPTS', {
 }, (table) => ({
   receiptNumberUnique: uniqueIndex('receipts_receipt_number_unique').on(table.receiptNumber),
   transactionUnique: uniqueIndex('receipts_transaction_unique').on(table.transactionId)
+}))
+
+// ---------------------------------------------------------------------------
+// PRINTER_CONFIG — Configuration de l'imprimante thermique (singleton, Phase 9.2)
+// ---------------------------------------------------------------------------
+/**
+ * Table à ligne unique (id fixe, voir `PRINTER_CONFIG_ID` dans
+ * `printer-config.service.ts`). Une seule imprimante de reçus configurée à
+ * la fois — cohérent avec le contexte mono-poste de l'application (voir
+ * `auth.service.ts` pour la même convention côté session utilisateur).
+ */
+export const printerConfig = sqliteTable('PRINTER_CONFIG', {
+  id: text('id').primaryKey(),
+  /** Impression thermique activée. Si `false`, on bascule directement sur le fallback PDF. */
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  /** 'usb' | 'network' */
+  connectionType: text('connection_type').notNull().default('network'),
+  /** Chemin du port local (USB), ex: `\\.\COM3`. */
+  devicePath: text('device_path'),
+  /** Adresse IP/hôte (réseau). */
+  host: text('host'),
+  /** Port TCP (réseau) — 9100 par défaut (port RAW standard des imprimantes ESC/POS). */
+  port: integer('port').notNull().default(9100),
+  lastTestAt: text('last_test_at'),
+  lastTestSuccess: integer('last_test_success', { mode: 'boolean' }),
+  lastTestMessage: text('last_test_message'),
+  updatedAt: text('updated_at').notNull().$defaultFn(nowIso)
+})
+
+// ---------------------------------------------------------------------------
+// BACKUP_CONFIG — Configuration de la sauvegarde cloud Google Drive (singleton, Phase 9.3)
+// ---------------------------------------------------------------------------
+export const backupConfig = sqliteTable('BACKUP_CONFIG', {
+  id: text('id').primaryKey(),
+  connected: integer('connected', { mode: 'boolean' }).notNull().default(false),
+  /** Adresse e-mail du compte Google connecté (affichage uniquement). */
+  accountEmail: text('account_email'),
+  /** Refresh token OAuth2, chiffré via `safeStorage` (Electron) — jamais en clair. */
+  refreshTokenEncrypted: text('refresh_token_encrypted'),
+  /** ID du dossier Google Drive "AcademyFlow — Sauvegardes", créé au premier export. */
+  driveFolderId: text('drive_folder_id'),
+  autoBackupEnabled: integer('auto_backup_enabled', { mode: 'boolean' }).notNull().default(false),
+  /** Heure (0-23) de déclenchement de la sauvegarde automatique quotidienne. */
+  autoBackupHour: integer('auto_backup_hour').notNull().default(2),
+  lastBackupAt: text('last_backup_at'),
+  /** 'success' | 'error' */
+  lastBackupStatus: text('last_backup_status'),
+  lastBackupMessage: text('last_backup_message'),
+  updatedAt: text('updated_at').notNull().$defaultFn(nowIso)
+})
+
+// ---------------------------------------------------------------------------
+// BACKUP_HISTORY — Historique des sauvegardes cloud envoyées (Phase 9.3)
+// ---------------------------------------------------------------------------
+export const backupHistory = sqliteTable('BACKUP_HISTORY', {
+  id: text('id').primaryKey().$defaultFn(generateId),
+  driveFileId: text('drive_file_id').notNull(),
+  fileName: text('file_name').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(nowIso)
+}, (table) => ({
+  driveFileIdUnique: uniqueIndex('backup_history_drive_file_id_unique').on(table.driveFileId),
+  createdAtIdx: index('backup_history_created_at_idx').on(table.createdAt)
 }))
 
 // ---------------------------------------------------------------------------
@@ -327,7 +399,8 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const schoolYearsRelations = relations(schoolYears, ({ many }) => ({
   enrollments: many(enrollments),
   tuitionSchedules: many(tuitionSchedules),
-  salaryPayments: many(salaryPayments)
+  salaryPayments: many(salaryPayments),
+  transactions: many(transactions)
 }))
 
 export const classesRelations = relations(classes, ({ many }) => ({
@@ -380,6 +453,7 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
   employee: one(employees, { fields: [transactions.employeeId], references: [employees.id] }),
   user: one(users, { fields: [transactions.userId], references: [users.id] }),
+  schoolYear: one(schoolYears, { fields: [transactions.schoolYearId], references: [schoolYears.id] }),
   receipt: one(receipts, { fields: [transactions.id], references: [receipts.transactionId] }),
   salaryPayment: one(salaryPayments, {
     fields: [transactions.id],

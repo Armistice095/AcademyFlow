@@ -2,8 +2,10 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { loadEnvFile } from './config/env'
 import { initDatabase, closeConnection } from './database'
 import { registerAllIpcHandlers } from './ipc/register-all'
+import { initAutoBackupScheduler, stopAutoBackupScheduler } from './services/backup.service'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -45,6 +47,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  loadEnvFile()
+
   try {
     initDatabase()
   } catch (error) {
@@ -52,6 +56,7 @@ app.whenReady().then(() => {
   }
 
   registerAllIpcHandlers()
+  initAutoBackupScheduler()
 
   createWindow()
 
@@ -61,6 +66,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  stopAutoBackupScheduler()
   closeConnection()
   if (process.platform !== 'darwin') {
     app.quit()

@@ -1,9 +1,9 @@
-import { createConnection, getDb, closeConnection, getDatabasePath } from './connection'
+import { createConnection, getDb, closeConnection, getDatabasePath, getSqlite } from './connection'
 import { runMigrations } from './migrate'
 import { seedDatabase } from './seed'
 import type { AppDatabase } from './connection'
 
-export { getDb, closeConnection, getDatabasePath }
+export { getDb, closeConnection, getDatabasePath, getSqlite }
 export * as schema from './schema'
 export type { AppDatabase }
 

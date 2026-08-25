@@ -6,6 +6,7 @@ import { registerSettingsIpcHandlers } from './settings.ipc'
 import { registerAuthIpcHandlers } from './auth.ipc'
 import { registerPrinterIpcHandlers } from './printer.ipc'
 import { registerBackupIpcHandlers } from './backup.ipc'
+import { registerDashboardIpcHandlers } from './dashboard.ipc'
 
 /**
  * Point d'entrée unique pour l'enregistrement de tous les handlers IPC.
@@ -21,4 +22,5 @@ export function registerAllIpcHandlers(): void {
   registerAuthIpcHandlers()
   registerPrinterIpcHandlers()
   registerBackupIpcHandlers()
+  registerDashboardIpcHandlers()
 }

@@ -23,6 +23,9 @@ import type {
   Student,
   StudentListItem,
   StudentSearchQuery,
+  StudentStats,
+  StudentStatsQuery,
+  StudentStatsTrend,
   UpdateGuardianDTO,
   UpdateStudentDTO
 } from '@shared/types/student.types'
@@ -139,7 +142,7 @@ export function create(data: CreateStudentInput): Student {
   const studentId = generateId()
   const matricule = generateMatricule()
   const status = data.status ?? 'nouveau'
-  const enrollmentStatus = status === 'redoublant' ? 'redoublant' : status === 'transféré' ? 'transféré' : 'admis'
+  const enrollmentStatus = status === 'redoublant' ? 'redoublant' : 'admis'
 
   db.transaction((tx) => {
     tx.insert(students)
@@ -251,9 +254,56 @@ export function findById(id: string): Student | null {
   return { ...toStudent(row), guardians: getGuardiansForStudent(id) }
 }
 
+/**
+ * Nom de la classe de l'élève pour l'année scolaire en cours, ou `null` si
+ * aucune inscription courante (utilisé par l'impression thermique — Phase 9.2).
+ */
+export function getCurrentClassName(studentId: string): string | null {
+  const db = getDb()
+
+  const currentYear = db
+    .select({ id: schoolYears.id })
+    .from(schoolYears)
+    .where(eq(schoolYears.isCurrent, true))
+    .get()
+  if (!currentYear) return null
+
+  const row = db
+    .select({ className: classes.name })
+    .from(enrollments)
+    .innerJoin(classes, eq(classes.id, enrollments.classId))
+    .where(and(eq(enrollments.studentId, studentId), eq(enrollments.schoolYearId, currentYear.id)))
+    .get()
+
+  return row?.className ?? null
+}
+
 // ---------------------------------------------------------------------------
 // Recherche & listes (F-007, F-008)
 // ---------------------------------------------------------------------------
+
+/**
+ * Correspondance élève -> nom de classe pour une année scolaire donnée.
+ * Utilisé pour signaler qu'un élève trouvé via une recherche globale (toutes
+ * années confondues, voir l'onglet "Ancien" de la réinscription) est déjà
+ * inscrit pour l'année en cours, sans jamais restreindre le périmètre de la
+ * recherche elle-même à cette année.
+ */
+export function listEnrollmentClassNames(schoolYearId: string): Record<string, string> {
+  const db = getDb()
+  const rows = db
+    .select({ studentId: enrollments.studentId, className: classes.name })
+    .from(enrollments)
+    .innerJoin(classes, eq(classes.id, enrollments.classId))
+    .where(eq(enrollments.schoolYearId, schoolYearId))
+    .all()
+
+  const map: Record<string, string> = {}
+  for (const row of rows) {
+    map[row.studentId] = row.className
+  }
+  return map
+}
 
 /** Recherche par nom/prénom/matricule (partielle), avec filtres classe/année optionnels. */
 export function search(query: StudentSearchQuery): PaginatedResult<StudentListItem> {
@@ -312,6 +362,91 @@ export function search(query: StudentSearchQuery): PaginatedResult<StudentListIt
     total,
     page,
     pageSize
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Statistiques (cartes KPI de la liste des élèves)
+// ---------------------------------------------------------------------------
+
+function getCurrentSchoolYearIdOrNull(): string | null {
+  const db = getDb()
+  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(eq(schoolYears.isCurrent, true)).get()
+  return year?.id ?? null
+}
+
+/** Année scolaire précédant celle donnée, si elle existe (tri par libellé, ex: "2025-2026"). */
+function getPreviousSchoolYearId(schoolYearId: string): string | null {
+  const db = getDb()
+  const years = db.select({ id: schoolYears.id }).from(schoolYears).orderBy(schoolYears.label).all()
+  const index = years.findIndex((y) => y.id === schoolYearId)
+  if (index <= 0) return null
+  return years[index - 1].id
+}
+
+function computeStatsGrowthPct(current: number, previous: number): number | null {
+  if (previous === 0) return null
+  return ((current - previous) / previous) * 100
+}
+
+interface StudentCounts {
+  total: number
+  nouveaux: number
+  anciens: number
+  male: number
+  female: number
+}
+
+const EMPTY_COUNTS: StudentCounts = { total: 0, nouveaux: 0, anciens: 0, male: 0, female: 0 }
+
+/** Compte les élèves actifs inscrits pour une année scolaire (et une classe optionnelle). */
+function countStudents(schoolYearId: string, classId?: string): StudentCounts {
+  const db = getDb()
+  const conditions = [eq(enrollments.schoolYearId, schoolYearId), eq(students.isActive, true)]
+  if (classId) conditions.push(eq(enrollments.classId, classId))
+
+  const rows = db
+    .select({ status: students.status, gender: students.gender })
+    .from(enrollments)
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .where(and(...conditions))
+    .all()
+
+  let nouveaux = 0
+  let male = 0
+  let female = 0
+  for (const row of rows) {
+    if (row.status === 'nouveau') nouveaux += 1
+    if (row.gender === 'M') male += 1
+    else if (row.gender === 'F') female += 1
+  }
+
+  return { total: rows.length, nouveaux, anciens: rows.length - nouveaux, male, female }
+}
+
+/**
+ * Statistiques affichées en cartes KPI en tête de la liste des élèves
+ * (effectifs total/anciens/nouveaux/garçons/filles), avec comparaison à
+ * l'année scolaire précédente. Recalculées selon le filtre classe éventuel.
+ */
+export function getStats(query: StudentStatsQuery = {}): StudentStats {
+  const schoolYearId = query.schoolYearId ?? getCurrentSchoolYearIdOrNull()
+  const current = schoolYearId ? countStudents(schoolYearId, query.classId) : EMPTY_COUNTS
+  const previousSchoolYearId = schoolYearId ? getPreviousSchoolYearId(schoolYearId) : null
+  const previous = previousSchoolYearId ? countStudents(previousSchoolYearId, query.classId) : EMPTY_COUNTS
+
+  const trend = (curr: number, prev: number): StudentStatsTrend => ({
+    current: curr,
+    previous: prev,
+    growthPct: computeStatsGrowthPct(curr, prev)
+  })
+
+  return {
+    total: trend(current.total, previous.total),
+    anciens: trend(current.anciens, previous.anciens),
+    nouveaux: trend(current.nouveaux, previous.nouveaux),
+    male: { count: current.male, percentage: current.total > 0 ? (current.male / current.total) * 100 : 0 },
+    female: { count: current.female, percentage: current.total > 0 ? (current.female / current.total) * 100 : 0 }
   }
 }
 

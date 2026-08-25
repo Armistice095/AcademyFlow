@@ -49,6 +49,18 @@ export function getDb(): AppDatabase {
   return dbInstance
 }
 
+/**
+ * Accès à l'instance `better-sqlite3` brute — nécessaire pour les opérations
+ * hors périmètre de Drizzle : checkpoint WAL avant sauvegarde cloud
+ * (`backup.service.ts`, Phase 9.3) et fermeture propre avant restauration.
+ */
+export function getSqlite(): Database.Database {
+  if (!sqliteInstance) {
+    throw new Error('La base de données n\'est pas initialisée. Appeler createConnection() au démarrage.')
+  }
+  return sqliteInstance
+}
+
 /** Ferme proprement la connexion SQLite (à appeler avant la fermeture de l'app). */
 export function closeConnection(): void {
   sqliteInstance?.close()

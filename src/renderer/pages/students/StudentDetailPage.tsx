@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  Banknote,
   FileBadge,
   FileText,
   IdCard,
@@ -23,6 +22,8 @@ import { FormField } from '@renderer/components/forms/FormField'
 import { DatePickerField } from '@renderer/components/forms/DatePickerField'
 import { ImageUpload } from '@renderer/components/forms/ImageUpload'
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
+import { StudentProfileCard } from './components/StudentProfileCard'
+import { StudentFinancialTab } from './components/StudentFinancialTab'
 import { useToast } from '@renderer/lib/use-toast'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { api } from '@renderer/lib/ipc'
@@ -31,12 +32,12 @@ import { formatDate, formatMatricule } from '@renderer/lib/formatters'
 import { EnrollmentCertPDF } from '@renderer/pdf/EnrollmentCertPDF'
 import { SchoolCertPDF } from '@renderer/pdf/SchoolCertPDF'
 import { StudentFilePDF } from '@renderer/pdf/StudentFilePDF'
-import type { EnrollmentWithDetails, Student, UpdateStudentDTO } from '@shared/types/student.types'
+import type { EnrollmentWithDetails, Guardian, Student, UpdateStudentDTO } from '@shared/types/student.types'
+import type { Transaction, TuitionAccount } from '@shared/types/transaction.types'
 
 const STATUS_LABELS: Record<string, string> = {
   nouveau: 'Nouveau',
   redoublant: 'Redoublant',
-  transféré: 'Transféré',
   admis: 'Admis(e)'
 }
 
@@ -49,7 +50,11 @@ export function StudentDetailPage(): JSX.Element {
 
   const [student, setStudent] = useState<Student | null>(null)
   const [history, setHistory] = useState<EnrollmentWithDetails[]>([])
+  const [account, setAccount] = useState<TuitionAccount | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [financialLoading, setFinancialLoading] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'info')
   const [editMode, setEditMode] = useState(searchParams.get('edit') === '1')
   const [draft, setDraft] = useState<UpdateStudentDTO>({})
   const [saving, setSaving] = useState(false)
@@ -77,6 +82,17 @@ export function StudentDetailPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  useEffect(() => {
+    if (!id) return
+    setFinancialLoading(true)
+    Promise.all([api.cashbox.getStudentAccount(id), api.cashbox.getJournal({ studentId: id, type: 'entry', pageSize: 1000 })])
+      .then(([accountData, journal]) => {
+        setAccount(accountData)
+        setTransactions(journal.items)
+      })
+      .finally(() => setFinancialLoading(false))
+  }, [id])
+
   const currentEnrollment = history.find((h) => h.schoolYearId === currentSchoolYear?.id)
 
   const startEdit = (): void => {
@@ -93,6 +109,7 @@ export function StudentDetailPage(): JSX.Element {
       status: student.status,
       photoPath: student.photoPath ?? undefined
     })
+    setActiveTab('info')
     setEditMode(true)
   }
 
@@ -168,16 +185,39 @@ export function StudentDetailPage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4">
+    <div className="mx-auto flex max-w-6xl flex-col gap-4">
       <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-gray-900">
-              {student.lastName} {student.firstName}
-            </h1>
-            <Badge variant="secondary">{STATUS_LABELS[student.status] ?? student.status}</Badge>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            {student.photoPath ? (
+              <img
+                src={student.photoPath}
+                alt={`${student.firstName} ${student.lastName}`}
+                className="h-16 w-16 rounded-full border border-border object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-input bg-muted">
+                <User className="h-6 w-6 text-muted-foreground" />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={startEdit}
+              className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm ring-2 ring-card"
+              aria-label="Modifier la photo"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
           </div>
-          <p className="font-mono text-sm text-muted-foreground">{formatMatricule(student.matricule)}</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-gray-900">
+                {student.lastName} {student.firstName}
+              </h1>
+              <Badge variant="secondary">{STATUS_LABELS[student.status] ?? student.status}</Badge>
+            </div>
+            <p className="font-mono text-sm text-muted-foreground">{formatMatricule(student.matricule)}</p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateDocument('enrollment')} disabled={generatingDoc !== null}>
@@ -199,7 +239,7 @@ export function StudentDetailPage(): JSX.Element {
         </div>
       </div>
 
-      <Tabs defaultValue="info">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="info">Informations</TabsTrigger>
           <TabsTrigger value="history">Parcours scolaire</TabsTrigger>
@@ -207,126 +247,119 @@ export function StudentDetailPage(): JSX.Element {
         </TabsList>
 
         <TabsContent value="info">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>Informations administratives</CardTitle>
-              {!editMode ? (
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
-                  <Pencil className="h-4 w-4" />
-                  Modifier
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditMode(false)}>
-                    <X className="h-4 w-4" />
-                    Annuler
-                  </Button>
-                  <Button size="sm" className="gap-1.5" onClick={handleSave} disabled={saving}>
-                    <Save className="h-4 w-4" />
-                    {saving ? 'Enregistrement...' : 'Enregistrer'}
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              {editMode ? (
-                <ImageUpload
-                  label="Photo"
-                  value={draft.photoPath ?? null}
-                  onChange={(v) => setDraft({ ...draft, photoPath: v ?? undefined })}
-                />
-              ) : (
-                <div className="flex items-center gap-3">
-                  {student.photoPath ? (
-                    <img
-                      src={student.photoPath}
-                      alt={`${student.firstName} ${student.lastName}`}
-                      className="h-20 w-20 rounded-lg border border-border object-cover"
-                    />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="flex flex-col gap-4 lg:col-span-2">
+              <Card>
+                <CardHeader className="flex-row items-center justify-between">
+                  <CardTitle>Informations personnelles</CardTitle>
+                  {!editMode ? (
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
+                      <Pencil className="h-4 w-4" />
+                      Modifier
+                    </Button>
                   ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-dashed border-input bg-muted">
-                      <User className="h-8 w-8 text-muted-foreground" />
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditMode(false)}>
+                        <X className="h-4 w-4" />
+                        Annuler
+                      </Button>
+                      <Button size="sm" className="gap-1.5" onClick={handleSave} disabled={saving}>
+                        <Save className="h-4 w-4" />
+                        {saving ? 'Enregistrement...' : 'Enregistrer'}
+                      </Button>
                     </div>
                   )}
-                </div>
-              )}
+                </CardHeader>
+                <CardContent className="flex flex-col gap-5">
+                  {editMode && (
+                    <ImageUpload
+                      label="Photo"
+                      value={draft.photoPath ?? null}
+                      onChange={(v) => setDraft({ ...draft, photoPath: v ?? undefined })}
+                    />
+                  )}
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {editMode ? (
-                  <>
-                    <FormField label="Nom" htmlFor="edit-lastName">
-                      <Input id="edit-lastName" value={draft.lastName ?? ''} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
-                    </FormField>
-                    <FormField label="Prénom(s)" htmlFor="edit-firstName">
-                      <Input id="edit-firstName" value={draft.firstName ?? ''} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
-                    </FormField>
-                    <FormField label="Sexe" htmlFor="edit-gender">
-                      <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v as Student['gender'] })}>
-                        <SelectTrigger id="edit-gender">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="M">Masculin</SelectItem>
-                          <SelectItem value="F">Féminin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-                    <FormField label="Date de naissance" htmlFor="edit-dob">
-                      <DatePickerField
-                        id="edit-dob"
-                        value={draft.dateOfBirth ?? ''}
-                        onChange={(v) => setDraft({ ...draft, dateOfBirth: v })}
-                      />
-                    </FormField>
-                    <FormField label="Lieu de naissance" htmlFor="edit-pob">
-                      <Input id="edit-pob" value={draft.placeOfBirth ?? ''} onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })} />
-                    </FormField>
-                    <FormField label="Nationalité" htmlFor="edit-nat">
-                      <Input id="edit-nat" value={draft.nationality ?? ''} onChange={(e) => setDraft({ ...draft, nationality: e.target.value })} />
-                    </FormField>
-                    <FormField label="Adresse" htmlFor="edit-addr" className="sm:col-span-2">
-                      <Input id="edit-addr" value={draft.address ?? ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
-                    </FormField>
-                  </>
-                ) : (
-                  <>
-                    <InfoRow label="Sexe" value={student.gender === 'M' ? 'Masculin' : 'Féminin'} />
-                    <InfoRow label="Date de naissance" value={formatDate(student.dateOfBirth)} />
-                    <InfoRow label="Lieu de naissance" value={student.placeOfBirth ?? '—'} />
-                    <InfoRow label="Nationalité" value={student.nationality} />
-                    <InfoRow label="Adresse" value={student.address ?? '—'} />
-                    <InfoRow label="Classe actuelle" value={currentEnrollment?.className ?? '—'} />
-                    {student.previousSchool && <InfoRow label="École de provenance" value={student.previousSchool} />}
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="mt-4">
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle>Responsables</CardTitle>
-              <AddGuardianButton studentId={student.id} onAdded={load} />
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {(student.guardians ?? []).map((g) => (
-                <div key={g.id} className="flex items-center justify-between rounded-md border border-border px-4 py-2.5">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {g.lastName} {g.firstName} <span className="text-muted-foreground">({g.relationship})</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {g.phone}
-                      {g.profession ? ` — ${g.profession}` : ''}
-                    </p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {editMode ? (
+                      <>
+                        <FormField label="Nom" htmlFor="edit-lastName">
+                          <Input id="edit-lastName" value={draft.lastName ?? ''} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
+                        </FormField>
+                        <FormField label="Prénom(s)" htmlFor="edit-firstName">
+                          <Input id="edit-firstName" value={draft.firstName ?? ''} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
+                        </FormField>
+                        <FormField label="Sexe" htmlFor="edit-gender">
+                          <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v as Student['gender'] })}>
+                            <SelectTrigger id="edit-gender">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="M">Masculin</SelectItem>
+                              <SelectItem value="F">Féminin</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormField>
+                        <FormField label="Date de naissance" htmlFor="edit-dob">
+                          <DatePickerField
+                            id="edit-dob"
+                            value={draft.dateOfBirth ?? ''}
+                            onChange={(v) => setDraft({ ...draft, dateOfBirth: v })}
+                          />
+                        </FormField>
+                        <FormField label="Lieu de naissance" htmlFor="edit-pob">
+                          <Input id="edit-pob" value={draft.placeOfBirth ?? ''} onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })} />
+                        </FormField>
+                        <FormField label="Nationalité" htmlFor="edit-nat">
+                          <Input id="edit-nat" value={draft.nationality ?? ''} onChange={(e) => setDraft({ ...draft, nationality: e.target.value })} />
+                        </FormField>
+                        <FormField label="Adresse" htmlFor="edit-addr" className="sm:col-span-2">
+                          <Input id="edit-addr" value={draft.address ?? ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+                        </FormField>
+                      </>
+                    ) : (
+                      <>
+                        <InfoRow label="Nom" value={student.lastName} />
+                        <InfoRow label="Sexe" value={student.gender === 'M' ? 'Masculin' : 'Féminin'} />
+                        <InfoRow label="Prénoms" value={student.firstName} />
+                        <InfoRow label="Nationalité" value={student.nationality} />
+                        <InfoRow label="Date de naissance" value={formatDate(student.dateOfBirth)} />
+                        <InfoRow label="Adresse" value={student.address ?? '—'} />
+                        <InfoRow label="Lieu de naissance" value={student.placeOfBirth ?? '—'} />
+                        <InfoRow
+                          label="Téléphone des parents"
+                          value={student.guardians?.[0]?.phone ?? '—'}
+                        />
+                        <InfoRow label="Classe actuelle" value={currentEnrollment?.className ?? '—'} />
+                        {student.previousSchool && <InfoRow label="École de provenance" value={student.previousSchool} />}
+                      </>
+                    )}
                   </div>
-                </div>
-              ))}
-              {(student.guardians ?? []).length === 0 && (
-                <p className="text-sm text-muted-foreground">Aucun responsable enregistré.</p>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex-row items-center justify-between">
+                  <CardTitle>Responsables</CardTitle>
+                  <AddGuardianButton studentId={student.id} onAdded={load} />
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {(student.guardians ?? []).map((g) => (
+                    <EditableGuardianRow key={g.id} guardian={g} onChanged={load} />
+                  ))}
+                  {(student.guardians ?? []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">Aucun responsable enregistré.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <StudentProfileCard
+              student={student}
+              isEnrolledThisYear={Boolean(currentEnrollment)}
+              account={account}
+              onViewFinancial={() => setActiveTab('financial')}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="history">
@@ -360,18 +393,14 @@ export function StudentDetailPage(): JSX.Element {
         </TabsContent>
 
         <TabsContent value="financial">
-          <Card>
-            <CardContent className="flex flex-col items-start gap-3 p-6">
-              <p className="text-sm text-muted-foreground">
-                Le détail des tranches attendues, montants payés et solde de scolarité se trouve dans le
-                module Caisse.
-              </p>
-              <Button variant="outline" className="gap-1.5" onClick={() => navigate(`/cashbox/student/${student.id}`)}>
-                <Banknote className="h-4 w-4" />
-                Voir le compte de scolarité
-              </Button>
-            </CardContent>
-          </Card>
+          <StudentFinancialTab
+            student={student}
+            className={currentEnrollment?.className ?? '—'}
+            schoolYearLabel={currentSchoolYear?.label ?? '—'}
+            account={account}
+            transactions={transactions}
+            loading={financialLoading}
+          />
         </TabsContent>
       </Tabs>
 
@@ -397,6 +426,144 @@ function InfoRow({ label, value }: { label: string; value: string }): JSX.Elemen
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-medium text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onChanged: () => void }): JSX.Element {
+  const { toast } = useToast()
+  const [editing, setEditing] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    lastName: guardian.lastName,
+    firstName: guardian.firstName,
+    phone: guardian.phone,
+    profession: guardian.profession ?? '',
+    relationship: guardian.relationship
+  })
+
+  const startEdit = (): void => {
+    setForm({
+      lastName: guardian.lastName,
+      firstName: guardian.firstName,
+      phone: guardian.phone,
+      profession: guardian.profession ?? '',
+      relationship: guardian.relationship
+    })
+    setEditing(true)
+  }
+
+  const handleSave = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      await api.students.updateGuardian(guardian.id, { ...form, profession: form.profession || undefined })
+      setEditing(false)
+      onChanged()
+      toast({ title: 'Responsable mis à jour' })
+    } catch (error) {
+      toast({
+        title: 'Échec de la mise à jour',
+        description: error instanceof Error ? error.message : 'Une erreur est survenue.',
+        variant: 'destructive'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (): Promise<void> => {
+    await api.students.deleteGuardian(guardian.id)
+    onChanged()
+    toast({ title: 'Responsable supprimé' })
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-md border border-border p-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FormField label="Nom" htmlFor={`g-${guardian.id}-lastName`}>
+            <Input
+              id={`g-${guardian.id}-lastName`}
+              value={form.lastName}
+              onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Prénom" htmlFor={`g-${guardian.id}-firstName`}>
+            <Input
+              id={`g-${guardian.id}-firstName`}
+              value={form.firstName}
+              onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Téléphone" htmlFor={`g-${guardian.id}-phone`}>
+            <Input
+              id={`g-${guardian.id}-phone`}
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Profession" htmlFor={`g-${guardian.id}-profession`}>
+            <Input
+              id={`g-${guardian.id}-profession`}
+              value={form.profession}
+              onChange={(e) => setForm({ ...form, profession: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Lien de parenté" htmlFor={`g-${guardian.id}-relationship`} className="sm:col-span-2">
+            <Input
+              id={`g-${guardian.id}-relationship`}
+              value={form.relationship}
+              onChange={(e) => setForm({ ...form, relationship: e.target.value })}
+            />
+          </FormField>
+        </div>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
+            Annuler
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? 'Enregistrement...' : 'Enregistrer'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between rounded-md border border-border px-4 py-2.5">
+      <div>
+        <p className="text-sm font-medium">
+          {guardian.lastName} {guardian.firstName} <span className="text-muted-foreground">({guardian.relationship})</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {guardian.phone}
+          {guardian.profession ? ` — ${guardian.profession}` : ''}
+        </p>
+      </div>
+      <div className="flex gap-1">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={startEdit}>
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:text-destructive"
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Supprimer ce responsable ?"
+        description={`${guardian.firstName} ${guardian.lastName} sera retiré(e) de la fiche de l'élève.`}
+        confirmLabel="Supprimer"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

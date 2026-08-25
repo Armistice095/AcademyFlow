@@ -12,8 +12,7 @@ export interface StudentFilePDFProps {
 
 const STATUS_LABELS: Record<string, string> = {
   admis: 'Admis(e)',
-  redoublant: 'Redoublant(e)',
-  transféré: 'Transféré(e)'
+  redoublant: 'Redoublant(e)'
 }
 
 /** Fiche individuelle de l'élève (F-012). */

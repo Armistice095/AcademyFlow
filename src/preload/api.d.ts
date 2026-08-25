@@ -17,15 +17,19 @@ import type {
   Student,
   StudentListItem,
   StudentSearchQuery,
+  StudentStats,
+  StudentStatsQuery,
   UpdateGuardianDTO,
   UpdateStudentDTO,
   CreateStudentDTO
 } from '@shared/types/student.types'
 import type {
   ArrearsStudent,
+  CashboxStats,
   CashReport,
   CreateTransactionDTO,
   JournalFilters,
+  JournalTransaction,
   Receipt,
   Transaction,
   TuitionAccount
@@ -33,6 +37,7 @@ import type {
 import type {
   CreateEmployeeDTO,
   Employee,
+  SalaryHistoryEntry,
   SalaryMonthStatus,
   SalaryPayment,
   UpdateEmployeeDTO
@@ -45,6 +50,10 @@ import type {
   TuitionSchedule,
   UpdateSchoolInfoDTO
 } from '@shared/types/settings.types'
+import type { DashboardStats } from '@shared/types/dashboard.types'
+import type { PrinterConfig, UpdatePrinterConfigDTO } from '@shared/types/printer.types'
+import type { BackupAccountStatus, BackupHistoryEntry, UpdateBackupSettingsDTO } from '@shared/types/backup.types'
+import type { UserAccount, CreateUserDTO, UpdateUserDTO } from '@shared/types/user.types'
 
 /**
  * Déclaration de l'API exposée au renderer via `window.api`, organisée par
@@ -67,13 +76,19 @@ export interface AcademyFlowAPI {
     delete: (id: string) => Promise<void>
     findById: (id: string) => Promise<Student | null>
     search: (query: StudentSearchQuery) => Promise<PaginatedResult<StudentListItem>>
+    getStats: (query?: StudentStatsQuery) => Promise<StudentStats>
+    listEnrollmentClassNames: (schoolYearId: string) => Promise<Record<string, string>>
     listByClass: (classId: string, schoolYearId: string) => Promise<Student[]>
     addGuardian: (studentId: string, data: CreateGuardianDTO) => Promise<Guardian>
     updateGuardian: (guardianId: string, data: UpdateGuardianDTO) => Promise<Guardian>
     deleteGuardian: (guardianId: string) => Promise<void>
     createEnrollment: (data: CreateEnrollmentDTO) => Promise<Enrollment>
     getEnrollmentHistory: (studentId: string) => Promise<EnrollmentWithDetails[]>
-    checkDuplicate: (firstName: string, lastName: string, schoolYearId: string) => Promise<Student | null>
+    checkDuplicate: (
+      firstName: string,
+      lastName: string,
+      schoolYearId: string
+    ) => Promise<Student | null>
     promoteStudents: (data: PromoteStudentsDTO) => Promise<PromotionResult>
     hasFinancialHistory: (studentId: string) => Promise<boolean>
   }
@@ -81,13 +96,14 @@ export interface AcademyFlowAPI {
   cashbox: {
     createEntry: (data: CreateTransactionDTO) => Promise<Transaction>
     cancelTransaction: (transactionId: string, reason: string) => Promise<Transaction>
-    getJournal: (filters: JournalFilters) => Promise<PaginatedResult<Transaction>>
+    getJournal: (filters: JournalFilters) => Promise<PaginatedResult<JournalTransaction>>
     getStudentAccount: (studentId: string) => Promise<TuitionAccount>
     listArrears: () => Promise<ArrearsStudent[]>
     getReport: (from: string, to: string) => Promise<CashReport>
     getReceipt: (transactionId: string) => Promise<Receipt | null>
     reprintReceipt: (transactionId: string) => Promise<Receipt>
-    getBalance: () => Promise<number>
+    getBalance: (schoolYearId?: string) => Promise<number>
+    getStats: (schoolYearId?: string) => Promise<CashboxStats>
   }
 
   personnel: {
@@ -95,8 +111,10 @@ export interface AcademyFlowAPI {
     update: (id: string, data: UpdateEmployeeDTO) => Promise<Employee>
     delete: (id: string) => Promise<void>
     list: () => Promise<Employee[]>
+    getById: (id: string) => Promise<Employee | null>
     markSalaryPaid: (employeeId: string, month: number, year: number) => Promise<SalaryPayment>
     getSalaryStatus: (month: number, year: number) => Promise<SalaryMonthStatus[]>
+    getSalaryHistory: (employeeId: string) => Promise<SalaryHistoryEntry[]>
   }
 
   settings: {
@@ -117,16 +135,34 @@ export interface AcademyFlowAPI {
     getCurrentUser: () => Promise<AuthUser | null>
     changePassword: (oldPassword: string, newPassword: string) => Promise<void>
     getUserById: (userId: string) => Promise<AuthUser | null>
+    listUsers: () => Promise<UserAccount[]>
+    createUser: (data: CreateUserDTO) => Promise<AuthUser>
+    updateUser: (userId: string, data: UpdateUserDTO) => Promise<UserAccount>
+    setUserActive: (userId: string, isActive: boolean) => Promise<UserAccount>
+    resetPassword: (userId: string) => Promise<{ temporaryPassword: string }>
   }
 
   printer: {
     printReceipt: (receiptId: string) => Promise<PrintResult>
     testConnection: () => Promise<PrinterStatus>
     openPdf: (base64: string, fileName: string) => Promise<void>
+    getConfig: () => Promise<PrinterConfig>
+    updateConfig: (data: UpdatePrinterConfigDTO) => Promise<PrinterConfig>
+    getStatus: () => Promise<PrinterStatus>
   }
 
   backup: {
     exportToCloud: () => Promise<BackupResult>
     getLastBackup: () => Promise<BackupInfo | null>
+    getStatus: () => Promise<BackupAccountStatus>
+    listBackups: () => Promise<BackupHistoryEntry[]>
+    restoreFromCloud: (backupId: string) => Promise<BackupResult>
+    connectGoogleAccount: () => Promise<BackupAccountStatus>
+    disconnectGoogleAccount: () => Promise<BackupAccountStatus>
+    updateSettings: (data: UpdateBackupSettingsDTO) => Promise<BackupAccountStatus>
+  }
+
+  dashboard: {
+    getStats: () => Promise<DashboardStats>
   }
 }

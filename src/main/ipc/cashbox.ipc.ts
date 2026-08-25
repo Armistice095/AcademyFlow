@@ -50,7 +50,11 @@ export function registerCashboxIpcHandlers(): void {
     return receiptService.incrementPrintCount(transactionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.cashbox.getBalance, async () => {
-    return cashboxService.getBalance()
+  ipcMain.handle(IPC_CHANNELS.cashbox.getBalance, async (_event, schoolYearId?: string) => {
+    return cashboxService.getBalance(schoolYearId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.cashbox.getStats, async (_event, schoolYearId?: string) => {
+    return cashboxService.getStats(schoolYearId)
   })
 }

@@ -34,11 +34,27 @@ export interface SalaryPayment {
   paidAt: string
 }
 
-/** État payé/non-payé d'un employé pour un mois donné. */
+/**
+ * État payé/non-payé d'un employé pour un mois donné (F-023).
+ * Embarque la fiche employé complète pour éviter un aller-retour IPC
+ * supplémentaire côté renderer (grille de suivi mensuel).
+ */
 export interface SalaryMonthStatus {
-  employeeId: string
+  employee: Employee
   month: number
   year: number
   isPaid: boolean
   paymentId?: string
+  paidAt?: string
+}
+
+/** Ligne d'historique de paiement pour un employé donné (F-024). */
+export interface SalaryHistoryEntry {
+  id: string
+  month: number
+  year: number
+  /** Montant réellement versé (celui du salaire au moment du paiement). */
+  amount: number
+  paidAt: string
+  transactionId: string
 }

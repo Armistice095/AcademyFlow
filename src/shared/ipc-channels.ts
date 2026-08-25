@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
     delete: 'students:delete',
     findById: 'students:findById',
     search: 'students:search',
+    getStats: 'students:getStats',
+    listEnrollmentClassNames: 'students:listEnrollmentClassNames',
     listByClass: 'students:listByClass',
     addGuardian: 'students:addGuardian',
     updateGuardian: 'students:updateGuardian',
@@ -41,17 +43,19 @@ export const IPC_CHANNELS = {
     getReport: 'cashbox:getReport',
     getReceipt: 'cashbox:getReceipt',
     reprintReceipt: 'cashbox:reprintReceipt',
-    getBalance: 'cashbox:getBalance'
+    getBalance: 'cashbox:getBalance',
+    getStats: 'cashbox:getStats'
   },
 
-  /** Complété en Phase 8 — Module Personnel. */
   personnel: {
     create: 'personnel:create',
     update: 'personnel:update',
     delete: 'personnel:delete',
     list: 'personnel:list',
+    getById: 'personnel:getById',
     markSalaryPaid: 'personnel:markSalaryPaid',
-    getSalaryStatus: 'personnel:getSalaryStatus'
+    getSalaryStatus: 'personnel:getSalaryStatus',
+    getSalaryHistory: 'personnel:getSalaryHistory'
   },
 
   settings: {
@@ -71,17 +75,39 @@ export const IPC_CHANNELS = {
     logout: 'auth:logout',
     getCurrentUser: 'auth:getCurrentUser',
     changePassword: 'auth:changePassword',
-    getUserById: 'auth:getUserById'
+    getUserById: 'auth:getUserById',
+    /** Gestion des comptes utilisateurs (Phase 9.4, onglet « Utilisateurs » des Paramètres). */
+    listUsers: 'auth:listUsers',
+    createUser: 'auth:createUser',
+    updateUser: 'auth:updateUser',
+    setUserActive: 'auth:setUserActive',
+    resetPassword: 'auth:resetPassword'
   },
 
   printer: {
     printReceipt: 'printer:printReceipt',
     testConnection: 'printer:testConnection',
-    openPdf: 'printer:openPdf'
+    openPdf: 'printer:openPdf',
+    /** Configuration de l'imprimante thermique (Phase 9.2). */
+    getConfig: 'printer:getConfig',
+    updateConfig: 'printer:updateConfig',
+    getStatus: 'printer:getStatus'
   },
 
   backup: {
     exportToCloud: 'backup:exportToCloud',
-    getLastBackup: 'backup:getLastBackup'
+    getLastBackup: 'backup:getLastBackup',
+    /** Sauvegarde cloud Google Drive (Phase 9.3). */
+    getStatus: 'backup:getStatus',
+    listBackups: 'backup:listBackups',
+    restoreFromCloud: 'backup:restoreFromCloud',
+    connectGoogleAccount: 'backup:connectGoogleAccount',
+    disconnectGoogleAccount: 'backup:disconnectGoogleAccount',
+    updateSettings: 'backup:updateSettings'
+  },
+
+  dashboard: {
+    /** Agrégat complet du tableau de bord financier (F-019, Phase 9.1). */
+    getStats: 'dashboard:getStats'
   }
 } as const

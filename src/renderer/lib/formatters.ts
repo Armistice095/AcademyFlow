@@ -19,12 +19,39 @@ export function formatDate(date: string | Date): string {
 }
 
 /**
+ * Formate une date (ISO 8601 ou objet Date) en format court `jj/mm/aaaa`.
+ * Ex: `formatDateShort('2018-06-15')` → `"15/06/2018"`
+ */
+export function formatDateShort(date: string | Date): string {
+  const parsed = typeof date === 'string' ? new Date(date) : date
+  return format(parsed, 'dd/MM/yyyy', { locale: fr })
+}
+
+/**
  * Formate une date-heure (ISO 8601 ou objet Date) en format long français.
  * Ex: `formatDateTime('2026-08-14T15:30:00Z')` → `"14 août 2026 à 15:30"`
  */
 export function formatDateTime(date: string | Date): string {
   const parsed = typeof date === 'string' ? new Date(date) : date
   return format(parsed, "d MMMM yyyy 'à' HH:mm", { locale: fr })
+}
+
+/**
+ * Formate une date-heure au format court utilisé par les flux d'activité
+ * (ex: `formatDateTimeShort('2026-08-17T21:11:00Z')` → `"17 août 2026 • 21:11"`).
+ */
+export function formatDateTimeShort(date: string | Date): string {
+  const parsed = typeof date === 'string' ? new Date(date) : date
+  return format(parsed, "d MMMM yyyy '•' HH:mm", { locale: fr })
+}
+
+/**
+ * Formate un montant en FCFA de façon compacte, pour les axes de graphique.
+ * Ex: `formatCFACompact(15400000)` → `"15,4 M F CFA"`
+ */
+export function formatCFACompact(amount: number): string {
+  const compact = new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(amount)
+  return `${compact} F CFA`
 }
 
 /**

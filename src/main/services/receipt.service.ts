@@ -58,6 +58,13 @@ export function getReceiptByTransaction(transactionId: string): Receipt | null {
   return row ?? null
 }
 
+/** Résout un reçu par son ID (utilisé par l'impression thermique — Phase 9.2). */
+export function getReceiptById(receiptId: string): Receipt | null {
+  const db = getDb()
+  const row = db.select().from(receipts).where(eq(receipts.id, receiptId)).get()
+  return row ?? null
+}
+
 /** Incrémente le compteur de réimpressions et retourne le reçu à jour. */
 export function incrementPrintCount(transactionId: string): Receipt {
   const db = getDb()

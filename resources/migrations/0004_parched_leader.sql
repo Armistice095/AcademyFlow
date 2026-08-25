@@ -1,0 +1,1 @@
+ALTER TABLE `TRANSACTIONS` ADD `cancel_reason` text;

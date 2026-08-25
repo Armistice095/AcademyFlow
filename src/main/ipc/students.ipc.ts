@@ -8,6 +8,7 @@ import type {
   CreateStudentDTO,
   PromoteStudentsDTO,
   StudentSearchQuery,
+  StudentStatsQuery,
   UpdateGuardianDTO,
   UpdateStudentDTO
 } from '@shared/types/student.types'
@@ -39,6 +40,14 @@ export function registerStudentsIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.students.search, async (_event, query: StudentSearchQuery) => {
     return studentService.search(query)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.students.getStats, async (_event, query: StudentStatsQuery) => {
+    return studentService.getStats(query)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.students.listEnrollmentClassNames, async (_event, schoolYearId: string) => {
+    return studentService.listEnrollmentClassNames(schoolYearId)
   })
 
   ipcMain.handle(

@@ -136,3 +136,34 @@ export function getArrearsStudents(): ArrearsStudent[] {
 
   return result
 }
+
+/**
+ * Statistiques de recouvrement agrégées, toutes classes confondues, pour
+ * l'année scolaire en cours (F-019, Phase 9.1). Contrairement à
+ * `getArrearsStudents`, cette fonction somme les comptes de scolarité de
+ * *tous* les élèves inscrits (pas seulement ceux en arriéré), pour produire
+ * un taux global de recouvrement.
+ */
+export function getGlobalRecoveryStats(): { totalExpected: number; totalPaid: number } {
+  const db = getDb()
+  const schoolYearId = getCurrentSchoolYearId()
+  if (!schoolYearId) return { totalExpected: 0, totalPaid: 0 }
+
+  const activeEnrollments = db
+    .select({ studentId: enrollments.studentId, classId: enrollments.classId })
+    .from(enrollments)
+    .innerJoin(students, eq(students.id, enrollments.studentId))
+    .where(and(eq(enrollments.schoolYearId, schoolYearId), eq(students.isActive, true)))
+    .all()
+
+  let totalExpected = 0
+  let totalPaid = 0
+
+  for (const row of activeEnrollments) {
+    const account = computeAccount(row.studentId, row.classId, schoolYearId)
+    totalExpected += account.totalExpected
+    totalPaid += account.totalPaid
+  }
+
+  return { totalExpected, totalPaid }
+}

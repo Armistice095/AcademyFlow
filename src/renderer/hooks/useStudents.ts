@@ -24,3 +24,21 @@ export function useStudents(options: UseStudentsOptions = {}): {
 
   return { query, setQuery, results, isLoading, refresh }
 }
+
+/**
+ * Cartes KPI (effectifs) de la liste des élèves — se recalculent
+ * automatiquement lorsque `classId` ou `schoolYearId` changent.
+ */
+export function useStudentStats(options: UseStudentsOptions = {}): {
+  stats: ReturnType<typeof useStudentsStore.getState>['stats']
+  isLoading: boolean
+} {
+  const { stats, isStatsLoading, loadStats } = useStudentsStore()
+
+  useEffect(() => {
+    void loadStats({ classId: options.classId, schoolYearId: options.schoolYearId })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options.classId, options.schoolYearId])
+
+  return { stats, isLoading: isStatsLoading }
+}
