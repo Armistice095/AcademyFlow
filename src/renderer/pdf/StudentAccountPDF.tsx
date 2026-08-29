@@ -50,9 +50,21 @@ export function StudentAccountPDF({
         </View>
 
         <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-          <SummaryBox label="Total attendu" value={formatCFA(account?.totalExpected ?? 0)} color="#0f172a" />
-          <SummaryBox label="Total payé" value={formatCFA(account?.totalPaid ?? 0)} color="#16a34a" />
-          <SummaryBox label="Reste à payer" value={formatCFA(Math.max(account?.balance ?? 0, 0))} color="#e11d48" />
+          <SummaryBox
+            label="Total attendu"
+            value={formatCFA(account?.totalExpected ?? 0)}
+            color="#0f172a"
+          />
+          <SummaryBox
+            label="Total payé"
+            value={formatCFA(account?.totalPaid ?? 0)}
+            color="#16a34a"
+          />
+          <SummaryBox
+            label="Reste à payer"
+            value={formatCFA(Math.max(account?.balance ?? 0, 0))}
+            color="#e11d48"
+          />
         </View>
 
         <View style={pdfStyles.section}>
@@ -69,12 +81,16 @@ export function StudentAccountPDF({
                 <Text style={[pdfStyles.tableCell, { width: 90 }]}>{formatDate(row.date)}</Text>
                 <Text style={[pdfStyles.tableCell, { width: 240 }]}>{row.description}</Text>
                 <Text style={[pdfStyles.tableCell, { width: 100 }]}>{formatCFA(row.amount)}</Text>
-                <Text style={[pdfStyles.tableCell, { width: 90 }]}>{PAYMENT_ROW_STATUS_LABELS[row.status]}</Text>
+                <Text style={[pdfStyles.tableCell, { width: 90 }]}>
+                  {PAYMENT_ROW_STATUS_LABELS[row.status]}
+                </Text>
               </View>
             ))}
             {rows.length === 0 && (
               <View style={pdfStyles.tableRow}>
-                <Text style={[pdfStyles.tableCell, { width: 520 }]}>Aucune opération enregistrée.</Text>
+                <Text style={[pdfStyles.tableCell, { width: 520 }]}>
+                  Aucune opération enregistrée.
+                </Text>
               </View>
             )}
           </View>
@@ -86,7 +102,15 @@ export function StudentAccountPDF({
   )
 }
 
-function SummaryBox({ label, value, color }: { label: string; value: string; color: string }): JSX.Element {
+function SummaryBox({
+  label,
+  value,
+  color
+}: {
+  label: string
+  value: string
+  color: string
+}): JSX.Element {
   return (
     <View style={{ flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 4, padding: 10 }}>
       <Text style={{ fontSize: 8, color: '#64748b', marginBottom: 3 }}>{label}</Text>

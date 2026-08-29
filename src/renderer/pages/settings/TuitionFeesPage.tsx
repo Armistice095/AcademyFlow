@@ -3,7 +3,13 @@ import { Plus, Save, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Card, CardContent } from '@renderer/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { MoneyInput } from '@renderer/components/forms/MoneyInput'
 import { DatePickerField } from '@renderer/components/forms/DatePickerField'
 import { FormField } from '@renderer/components/forms/FormField'
@@ -11,17 +17,31 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useToast } from '@renderer/lib/use-toast'
 import { formatCFA } from '@renderer/lib/formatters'
 import { api } from '@renderer/lib/ipc'
-import type { TuitionInstallmentInput } from '@shared/types/settings.types'
+import type { TuitionInstallmentInput, TuitionTarget } from '@shared/types/settings.types'
+
+const TARGET_LABELS: Record<TuitionTarget, string> = {
+  tous: 'Tous',
+  nouveau: 'Nouveau',
+  ancien: 'Ancien'
+}
 
 interface DraftInstallment extends TuitionInstallmentInput {
-  /** Clé locale stable pour le rendu de liste (les tranches n'ont pas encore d'id tant que non sauvegardées). */
+  /**
+   * Clé locale stable pour le rendu de liste React. Différente de `id` :
+   * `key` existe toujours (même pour une tranche pas encore sauvegardée),
+   * `id` n'existe que pour une tranche déjà en base — c'est justement ce
+   * qui permet au service de faire un update en place plutôt que de
+   * régénérer un nouvel id à chaque sauvegarde (voir saveTuitionSchedule).
+   */
   key: string
+  /** `true` si au moins un paiement validé référence déjà cette tranche. */
+  hasPayments?: boolean
 }
 
 let nextKey = 0
 function makeEmptyInstallment(): DraftInstallment {
   nextKey += 1
-  return { key: `new-${nextKey}`, label: '', amount: 0, dueDate: '' }
+  return { key: `new-${nextKey}`, label: '', amount: 0, dueDate: '', appliesTo: 'tous' }
 }
 
 export function TuitionFeesPage(): JSX.Element {
@@ -54,10 +74,13 @@ export function TuitionFeesPage(): JSX.Element {
           setInstallments(
             schedule.installments.map((i) => ({
               key: i.id,
+              id: i.id,
               label: i.label,
               amount: i.amount,
               dueDate: i.dueDate,
-              sortOrder: i.sortOrder
+              sortOrder: i.sortOrder,
+              appliesTo: i.appliesTo,
+              hasPayments: i.hasPayments
             }))
           )
         } else {
@@ -73,6 +96,13 @@ export function TuitionFeesPage(): JSX.Element {
   }
 
   const removeInstallment = (key: string): void => {
+    const target = installments.find((i) => i.key === key)
+    if (target?.hasPayments) {
+      setError(
+        `La tranche "${target.label}" a déjà des paiements enregistrés et ne peut pas être supprimée.`
+      )
+      return
+    }
     setInstallments((prev) => prev.filter((i) => i.key !== key))
   }
 
@@ -81,6 +111,20 @@ export function TuitionFeesPage(): JSX.Element {
   }
 
   const total = installments.reduce((sum, i) => sum + (i.amount || 0), 0)
+  const hasTargetedInstallments = installments.some((i) => i.appliesTo !== 'tous')
+  const totalCommon = installments
+    .filter((i) => i.appliesTo === 'tous')
+    .reduce((sum, i) => sum + (i.amount || 0), 0)
+  const totalNouveau =
+    totalCommon +
+    installments
+      .filter((i) => i.appliesTo === 'nouveau')
+      .reduce((sum, i) => sum + (i.amount || 0), 0)
+  const totalAncien =
+    totalCommon +
+    installments
+      .filter((i) => i.appliesTo === 'ancien')
+      .reduce((sum, i) => sum + (i.amount || 0), 0)
 
   const handleSave = async (): Promise<void> => {
     if (!classId || !currentSchoolYear) return
@@ -92,7 +136,7 @@ export function TuitionFeesPage(): JSX.Element {
     }
     for (const i of installments) {
       if (!i.label.trim() || i.amount <= 0 || !i.dueDate) {
-        setError('Chaque tranche doit avoir un libellé, un montant positif et une date d\'échéance.')
+        setError("Chaque tranche doit avoir un libellé, un montant positif et une date d'échéance.")
         return
       }
     }
@@ -102,10 +146,16 @@ export function TuitionFeesPage(): JSX.Element {
       await api.settings.saveTuitionSchedule({
         classId,
         schoolYearId: currentSchoolYear.id,
-        installments: installments.map(({ label, amount, dueDate }, index) => ({
+        installments: installments.map(({ id, label, amount, dueDate, appliesTo }, index) => ({
+          // `id` transmis uniquement pour une tranche déjà en base : c'est
+          // ce qui permet au service de faire un UPDATE en place au lieu
+          // de recréer la tranche avec un nouvel id (et donc de perdre le
+          // lien avec les paiements déjà enregistrés dessus).
+          id,
           label,
           amount,
           dueDate,
+          appliesTo,
           sortOrder: index
         }))
       })
@@ -120,7 +170,7 @@ export function TuitionFeesPage(): JSX.Element {
   if (!currentSchoolYear) {
     return (
       <p className="text-sm text-muted-foreground">
-        Aucune année scolaire active. Configurez-en une dans l'onglet « Année scolaire » avant de
+        Aucune année scolaire active. Configurez-en une dans l’onglet « Année scolaire » avant de
         définir un barème.
       </p>
     )
@@ -144,7 +194,8 @@ export function TuitionFeesPage(): JSX.Element {
           </Select>
         </FormField>
         <p className="text-sm text-muted-foreground">
-          Barème pour l'année <span className="font-medium text-foreground">{currentSchoolYear.label}</span>
+          Barème pour l’année{' '}
+          <span className="font-medium text-foreground">{currentSchoolYear.label}</span>
         </p>
       </div>
 
@@ -155,22 +206,40 @@ export function TuitionFeesPage(): JSX.Element {
               <p className="py-6 text-center text-sm text-muted-foreground">Chargement...</p>
             ) : (
               <>
-                <div className="grid grid-cols-[1fr_180px_180px_auto] items-center gap-3 text-xs font-medium text-muted-foreground">
+                <div className="grid grid-cols-[1fr_140px_180px_180px_auto] items-center gap-3 text-xs font-medium text-muted-foreground">
                   <span>Libellé de la tranche</span>
+                  <span>Concerné</span>
                   <span>Montant</span>
-                  <span>Date d'échéance</span>
+                  <span>Date d’échéance</span>
                   <span />
                 </div>
                 {installments.map((installment) => (
                   <div
                     key={installment.key}
-                    className="grid grid-cols-[1fr_180px_180px_auto] items-center gap-3"
+                    className="grid grid-cols-[1fr_140px_180px_180px_auto] items-center gap-3"
                   >
                     <Input
                       value={installment.label}
-                      onChange={(e) => updateInstallment(installment.key, { label: e.target.value })}
+                      onChange={(e) =>
+                        updateInstallment(installment.key, { label: e.target.value })
+                      }
                       placeholder="Ex: 1ère tranche"
                     />
+                    <Select
+                      value={installment.appliesTo}
+                      onValueChange={(v) =>
+                        updateInstallment(installment.key, { appliesTo: v as TuitionTarget })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tous">{TARGET_LABELS.tous}</SelectItem>
+                        <SelectItem value="nouveau">{TARGET_LABELS.nouveau}</SelectItem>
+                        <SelectItem value="ancien">{TARGET_LABELS.ancien}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <MoneyInput
                       value={installment.amount}
                       onChange={(amount) => updateInstallment(installment.key, { amount })}
@@ -184,14 +253,25 @@ export function TuitionFeesPage(): JSX.Element {
                       variant="ghost"
                       size="icon"
                       onClick={() => removeInstallment(installment.key)}
-                      disabled={installments.length === 1}
+                      disabled={installments.length === 1 || installment.hasPayments}
+                      title={
+                        installment.hasPayments
+                          ? 'Des paiements sont déjà enregistrés sur cette tranche : suppression impossible.'
+                          : undefined
+                      }
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 ))}
 
-                <Button type="button" variant="outline" size="sm" className="w-fit gap-1.5" onClick={addInstallment}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit gap-1.5"
+                  onClick={addInstallment}
+                >
                   <Plus className="h-4 w-4" />
                   Ajouter une tranche
                 </Button>
@@ -199,10 +279,29 @@ export function TuitionFeesPage(): JSX.Element {
                 {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 
                 <div className="mt-2 flex items-center justify-between border-t border-border pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Total pour cette classe :{' '}
-                    <span className="text-base font-semibold text-foreground">{formatCFA(total)}</span>
-                  </p>
+                  {hasTargetedInstallments ? (
+                    <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+                      <p>
+                        Total Nouveau :{' '}
+                        <span className="font-semibold text-foreground">
+                          {formatCFA(totalNouveau)}
+                        </span>
+                      </p>
+                      <p>
+                        Total Ancien :{' '}
+                        <span className="font-semibold text-foreground">
+                          {formatCFA(totalAncien)}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Total pour cette classe :{' '}
+                      <span className="text-base font-semibold text-foreground">
+                        {formatCFA(total)}
+                      </span>
+                    </p>
+                  )}
                   <Button onClick={handleSave} disabled={saving} className="gap-1.5">
                     <Save className="h-4 w-4" />
                     {saving ? 'Enregistrement...' : 'Enregistrer'}

@@ -21,7 +21,7 @@ export function StudentFilePDF({ student, history, schoolInfo }: StudentFilePDFP
     <Document title={`Fiche élève - ${student.firstName} ${student.lastName}`}>
       <Page size="A4" style={pdfStyles.page}>
         <PdfHeader schoolInfo={schoolInfo} />
-        <Text style={pdfStyles.title}>Fiche individuelle de l'élève</Text>
+        <Text style={pdfStyles.title}>Fiche individuelle de l’élève</Text>
 
         <View style={{ flexDirection: 'row', gap: 16 }}>
           <View style={{ flex: 1 }}>
@@ -39,7 +39,9 @@ export function StudentFilePDF({ student, history, schoolInfo }: StudentFilePDFP
               </View>
               <View style={pdfStyles.row}>
                 <Text style={pdfStyles.label}>Sexe</Text>
-                <Text style={pdfStyles.value}>{student.gender === 'M' ? 'Masculin' : 'Féminin'}</Text>
+                <Text style={pdfStyles.value}>
+                  {student.gender === 'M' ? 'Masculin' : 'Féminin'}
+                </Text>
               </View>
               <View style={pdfStyles.row}>
                 <Text style={pdfStyles.label}>Date de naissance</Text>

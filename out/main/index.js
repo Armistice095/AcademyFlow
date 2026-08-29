@@ -9,6 +9,7 @@ const drizzleOrm = require("drizzle-orm");
 const sqliteCore = require("drizzle-orm/sqlite-core");
 const node_crypto = require("node:crypto");
 const migrator = require("drizzle-orm/better-sqlite3/migrator");
+const node_os = require("node:os");
 const bcrypt = require("bcryptjs");
 const nodeThermalPrinter = require("node-thermal-printer");
 const dateFns = require("date-fns");
@@ -141,20 +142,24 @@ function generateId() {
   return node_crypto.randomUUID();
 }
 const nowIso = () => (/* @__PURE__ */ new Date()).toISOString();
-const users = sqliteCore.sqliteTable("USERS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  username: sqliteCore.text("username").notNull(),
-  passwordHash: sqliteCore.text("password_hash").notNull(),
-  fullName: sqliteCore.text("full_name").notNull(),
-  /** Force le changement de mot de passe au prochain login (voir F-004.5). */
-  mustChangePassword: sqliteCore.integer("must_change_password", { mode: "boolean" }).notNull().default(true),
-  /** Désactivation d'un compte sans suppression physique (Phase 9.4 — cohérent avec BR-006). */
-  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
-  lastLogin: sqliteCore.text("last_login")
-}, (table) => ({
-  usernameUnique: sqliteCore.uniqueIndex("users_username_unique").on(table.username)
-}));
+const users = sqliteCore.sqliteTable(
+  "USERS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    username: sqliteCore.text("username").notNull(),
+    passwordHash: sqliteCore.text("password_hash").notNull(),
+    fullName: sqliteCore.text("full_name").notNull(),
+    /** Force le changement de mot de passe au prochain login (voir F-004.5). */
+    mustChangePassword: sqliteCore.integer("must_change_password", { mode: "boolean" }).notNull().default(true),
+    /** Désactivation d'un compte sans suppression physique (Phase 9.4 — cohérent avec BR-006). */
+    isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
+    lastLogin: sqliteCore.text("last_login")
+  },
+  (table) => ({
+    usernameUnique: sqliteCore.uniqueIndex("users_username_unique").on(table.username)
+  })
+);
 const schoolInfo = sqliteCore.sqliteTable("SCHOOL_INFO", {
   id: sqliteCore.text("id").primaryKey(),
   name: sqliteCore.text("name").notNull().default(""),
@@ -167,144 +172,201 @@ const schoolInfo = sqliteCore.sqliteTable("SCHOOL_INFO", {
   stampDataUrl: sqliteCore.text("stamp_data_url"),
   updatedAt: sqliteCore.text("updated_at").notNull().$defaultFn(nowIso)
 });
-const schoolYears = sqliteCore.sqliteTable("SCHOOL_YEARS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  /** ex: "2025-2026" */
-  label: sqliteCore.text("label").notNull(),
-  isCurrent: sqliteCore.integer("is_current", { mode: "boolean" }).notNull().default(false),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  labelUnique: sqliteCore.uniqueIndex("school_years_label_unique").on(table.label)
-}));
-const classes = sqliteCore.sqliteTable("CLASSES", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  /** ex: "CI", "CP", "6ème"... */
-  name: sqliteCore.text("name").notNull(),
-  sortOrder: sqliteCore.integer("sort_order").notNull().default(0)
-}, (table) => ({
-  nameUnique: sqliteCore.uniqueIndex("classes_name_unique").on(table.name)
-}));
-const students = sqliteCore.sqliteTable("STUDENTS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  /** BR-002 : généré automatiquement, unique, jamais réutilisé, jamais modifiable. */
-  matricule: sqliteCore.text("matricule").notNull(),
-  photoPath: sqliteCore.text("photo_path"),
-  lastName: sqliteCore.text("last_name").notNull(),
-  firstName: sqliteCore.text("first_name").notNull(),
-  /** 'M' | 'F' */
-  gender: sqliteCore.text("gender").notNull(),
-  dateOfBirth: sqliteCore.text("date_of_birth").notNull(),
-  placeOfBirth: sqliteCore.text("place_of_birth"),
-  nationality: sqliteCore.text("nationality").notNull().default("Béninoise"),
-  address: sqliteCore.text("address"),
-  /** Renseigné si l'élève est un transfert. */
-  previousSchool: sqliteCore.text("previous_school"),
-  /** 'nouveau' | 'redoublant' */
-  status: sqliteCore.text("status").notNull().default("nouveau"),
-  /** BR-006 : soft delete — jamais de suppression physique. */
-  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+const license = sqliteCore.sqliteTable("LICENSE", {
+  id: sqliteCore.text("id").primaryKey(),
+  /** Dupliqué en clair pour un contrôle rapide — la valeur de référence reste celle du payload chiffré. */
+  machineFingerprint: sqliteCore.text("machine_fingerprint").notNull(),
+  /** Blob base64 (iv + authTag + ciphertext) — voir commentaire de la table. */
+  encryptedPayload: sqliteCore.text("encrypted_payload").notNull(),
+  /** Dernière vérification en ligne réussie (resynchronisation opportuniste). `null` si jamais rejointe depuis l'activation. */
+  lastVerifiedAt: sqliteCore.text("last_verified_at"),
+  /** Marque la fin de l'assistant d'onboarding (étapes 1 à 5 complétées ; l'étape 6 Google Drive est optionnelle). */
+  onboardingCompletedAt: sqliteCore.text("onboarding_completed_at"),
   createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
-  updatedAt: sqliteCore.text("updated_at").notNull().$defaultFn(nowIso),
-  createdBy: sqliteCore.text("created_by").references(() => users.id, { onDelete: "set null" })
-}, (table) => ({
-  matriculeUnique: sqliteCore.uniqueIndex("students_matricule_unique").on(table.matricule),
-  nameIdx: sqliteCore.index("students_name_idx").on(table.lastName, table.firstName)
-}));
-const guardians = sqliteCore.sqliteTable("GUARDIANS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  studentId: sqliteCore.text("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
-  lastName: sqliteCore.text("last_name").notNull(),
-  firstName: sqliteCore.text("first_name").notNull(),
-  phone: sqliteCore.text("phone").notNull(),
-  profession: sqliteCore.text("profession"),
-  /** ex: "Père", "Mère", "Tuteur légal"... */
-  relationship: sqliteCore.text("relationship").notNull()
-}, (table) => ({
-  studentIdx: sqliteCore.index("guardians_student_idx").on(table.studentId)
-}));
-const enrollments = sqliteCore.sqliteTable("ENROLLMENTS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  studentId: sqliteCore.text("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
-  schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "restrict" }),
-  classId: sqliteCore.text("class_id").notNull().references(() => classes.id, { onDelete: "restrict" }),
-  /** 'admis' | 'redoublant' */
-  status: sqliteCore.text("status").notNull(),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  // BR-003 : un seul statut de progression par élève et par année scolaire.
-  studentYearUnique: sqliteCore.uniqueIndex("enrollments_student_year_unique").on(
-    table.studentId,
-    table.schoolYearId
-  )
-}));
-const tuitionSchedules = sqliteCore.sqliteTable("TUITION_SCHEDULES", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  classId: sqliteCore.text("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
-  schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "cascade" })
-}, (table) => ({
-  classYearUnique: sqliteCore.uniqueIndex("tuition_schedules_class_year_unique").on(
-    table.classId,
-    table.schoolYearId
-  )
-}));
-const tuitionInstallments = sqliteCore.sqliteTable("TUITION_INSTALLMENTS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  scheduleId: sqliteCore.text("schedule_id").notNull().references(() => tuitionSchedules.id, { onDelete: "cascade" }),
-  /** ex: "1ère tranche" */
-  label: sqliteCore.text("label").notNull(),
-  /** Montant attendu, en FCFA. */
-  amount: sqliteCore.integer("amount").notNull(),
-  dueDate: sqliteCore.text("due_date").notNull(),
-  sortOrder: sqliteCore.integer("sort_order").notNull().default(0)
-}, (table) => ({
-  scheduleIdx: sqliteCore.index("tuition_installments_schedule_idx").on(table.scheduleId)
-}));
-const transactions = sqliteCore.sqliteTable("TRANSACTIONS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  /** 'entry' | 'exit' */
-  type: sqliteCore.text("type").notNull(),
-  /** BR-004 : frais d'inscription, scolarité, frais divers, don, autre recette
-   *  (entrées) — dépense quotidienne, salaire, achat de fournitures, charge
-   *  diverse (sorties). Voir shared/constants pour la liste exacte. */
-  category: sqliteCore.text("category").notNull(),
-  description: sqliteCore.text("description"),
-  /** Montant, en FCFA (entier). */
-  amount: sqliteCore.integer("amount").notNull(),
-  studentId: sqliteCore.text("student_id").references(() => students.id, { onDelete: "set null" }),
-  installmentId: sqliteCore.text("installment_id").references(() => tuitionInstallments.id, {
-    onDelete: "set null"
-  }),
-  employeeId: sqliteCore.text("employee_id").references(() => employees.id, { onDelete: "set null" }),
-  /** 'validated' | 'cancelled' — BR-005 : jamais de suppression, uniquement marquage "annulée". */
-  status: sqliteCore.text("status").notNull().default("validated"),
-  /** Référence l'opération d'annulation associée, le cas échéant. */
-  cancelledByTxn: sqliteCore.text("cancelled_by_txn"),
-  /** Motif saisi par l'opérateur lors de l'annulation (BR-005 : conservé sur l'opération elle-même,
-   *  aucune ligne supplémentaire n'est créée dans le journal). */
-  cancelReason: sqliteCore.text("cancel_reason"),
-  userId: sqliteCore.text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
-  /** Année scolaire en cours au moment de l'enregistrement — permet de filtrer
-   *  le journal de caisse par année scolaire (cohérent avec ENROLLMENTS). */
-  schoolYearId: sqliteCore.text("school_year_id").references(() => schoolYears.id, { onDelete: "restrict" }),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  createdAtIdx: sqliteCore.index("transactions_created_at_idx").on(table.createdAt),
-  studentIdx: sqliteCore.index("transactions_student_idx").on(table.studentId),
-  typeIdx: sqliteCore.index("transactions_type_idx").on(table.type),
-  schoolYearIdx: sqliteCore.index("transactions_school_year_idx").on(table.schoolYearId)
-}));
-const receipts = sqliteCore.sqliteTable("RECEIPTS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  receiptNumber: sqliteCore.text("receipt_number").notNull(),
-  transactionId: sqliteCore.text("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
-  amount: sqliteCore.integer("amount").notNull(),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
-  /** Nombre de réimpressions du reçu. */
-  printCount: sqliteCore.integer("print_count").notNull().default(0)
-}, (table) => ({
-  receiptNumberUnique: sqliteCore.uniqueIndex("receipts_receipt_number_unique").on(table.receiptNumber),
-  transactionUnique: sqliteCore.uniqueIndex("receipts_transaction_unique").on(table.transactionId)
-}));
+  updatedAt: sqliteCore.text("updated_at").notNull().$defaultFn(nowIso)
+});
+const schoolYears = sqliteCore.sqliteTable(
+  "SCHOOL_YEARS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    /** ex: "2025-2026" */
+    label: sqliteCore.text("label").notNull(),
+    isCurrent: sqliteCore.integer("is_current", { mode: "boolean" }).notNull().default(false),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    labelUnique: sqliteCore.uniqueIndex("school_years_label_unique").on(table.label)
+  })
+);
+const classes = sqliteCore.sqliteTable(
+  "CLASSES",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    /** ex: "CI", "CP", "6ème"... */
+    name: sqliteCore.text("name").notNull(),
+    sortOrder: sqliteCore.integer("sort_order").notNull().default(0)
+  },
+  (table) => ({
+    nameUnique: sqliteCore.uniqueIndex("classes_name_unique").on(table.name)
+  })
+);
+const students = sqliteCore.sqliteTable(
+  "STUDENTS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    /** BR-002 : généré automatiquement, unique, jamais réutilisé, jamais modifiable. */
+    matricule: sqliteCore.text("matricule").notNull(),
+    photoPath: sqliteCore.text("photo_path"),
+    lastName: sqliteCore.text("last_name").notNull(),
+    firstName: sqliteCore.text("first_name").notNull(),
+    /** 'M' | 'F' */
+    gender: sqliteCore.text("gender").notNull(),
+    dateOfBirth: sqliteCore.text("date_of_birth").notNull(),
+    placeOfBirth: sqliteCore.text("place_of_birth"),
+    nationality: sqliteCore.text("nationality").notNull().default("Béninoise"),
+    address: sqliteCore.text("address"),
+    /** Renseigné si l'élève est un transfert. */
+    previousSchool: sqliteCore.text("previous_school"),
+    /** BR-006 : soft delete — jamais de suppression physique. */
+    isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
+    updatedAt: sqliteCore.text("updated_at").notNull().$defaultFn(nowIso),
+    createdBy: sqliteCore.text("created_by").references(() => users.id, { onDelete: "set null" })
+  },
+  (table) => ({
+    matriculeUnique: sqliteCore.uniqueIndex("students_matricule_unique").on(table.matricule),
+    nameIdx: sqliteCore.index("students_name_idx").on(table.lastName, table.firstName)
+  })
+);
+const guardians = sqliteCore.sqliteTable(
+  "GUARDIANS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    studentId: sqliteCore.text("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+    lastName: sqliteCore.text("last_name").notNull(),
+    firstName: sqliteCore.text("first_name").notNull(),
+    phone: sqliteCore.text("phone").notNull(),
+    profession: sqliteCore.text("profession"),
+    /** ex: "Père", "Mère", "Tuteur légal"... */
+    relationship: sqliteCore.text("relationship").notNull()
+  },
+  (table) => ({
+    studentIdx: sqliteCore.index("guardians_student_idx").on(table.studentId)
+  })
+);
+const enrollments = sqliteCore.sqliteTable(
+  "ENROLLMENTS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    studentId: sqliteCore.text("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+    schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "restrict" }),
+    classId: sqliteCore.text("class_id").notNull().references(() => classes.id, { onDelete: "restrict" }),
+    /** 'admis' | 'redoublant' */
+    status: sqliteCore.text("status").notNull(),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    // BR-003 : un seul statut de progression par élève et par année scolaire.
+    studentYearUnique: sqliteCore.uniqueIndex("enrollments_student_year_unique").on(
+      table.studentId,
+      table.schoolYearId
+    ),
+    // Rapports "Par classe" (F-017 refonte) : résolution élèves ↔ classe pour
+    // l'année en cours, appelée à chaque chargement des rapports filtrés.
+    classYearIdx: sqliteCore.index("enrollments_class_year_idx").on(table.classId, table.schoolYearId)
+  })
+);
+const tuitionSchedules = sqliteCore.sqliteTable(
+  "TUITION_SCHEDULES",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    classId: sqliteCore.text("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
+    schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "cascade" })
+  },
+  (table) => ({
+    classYearUnique: sqliteCore.uniqueIndex("tuition_schedules_class_year_unique").on(
+      table.classId,
+      table.schoolYearId
+    )
+  })
+);
+const tuitionInstallments = sqliteCore.sqliteTable(
+  "TUITION_INSTALLMENTS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    scheduleId: sqliteCore.text("schedule_id").notNull().references(() => tuitionSchedules.id, { onDelete: "cascade" }),
+    /** ex: "1ère tranche" */
+    label: sqliteCore.text("label").notNull(),
+    /** Montant attendu, en FCFA. */
+    amount: sqliteCore.integer("amount").notNull(),
+    dueDate: sqliteCore.text("due_date").notNull(),
+    sortOrder: sqliteCore.integer("sort_order").notNull().default(0),
+    /**
+     * 'tous' | 'nouveau' | 'ancien' — population concernée par cette tranche
+     * (ex: une tranche "Frais d'inscription" peut ne concerner que les
+     * nouveaux, en plus des tranches communes à tous). Calculé au moment du
+     * compte de scolarité via `getEnrollmentHistoryStatus` (student.service).
+     */
+    appliesTo: sqliteCore.text("applies_to").notNull().default("tous").$type()
+  },
+  (table) => ({
+    scheduleIdx: sqliteCore.index("tuition_installments_schedule_idx").on(table.scheduleId)
+  })
+);
+const transactions = sqliteCore.sqliteTable(
+  "TRANSACTIONS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    /** 'entry' | 'exit' */
+    type: sqliteCore.text("type").notNull(),
+    /** BR-004 : frais d'inscription, scolarité, frais divers, don, autre recette
+     *  (entrées) — dépense quotidienne, salaire, achat de fournitures, charge
+     *  diverse (sorties). Voir shared/constants pour la liste exacte. */
+    category: sqliteCore.text("category").notNull(),
+    description: sqliteCore.text("description"),
+    /** Montant, en FCFA (entier). */
+    amount: sqliteCore.integer("amount").notNull(),
+    studentId: sqliteCore.text("student_id").references(() => students.id, { onDelete: "set null" }),
+    installmentId: sqliteCore.text("installment_id").references(() => tuitionInstallments.id, {
+      onDelete: "set null"
+    }),
+    employeeId: sqliteCore.text("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** 'validated' | 'cancelled' — BR-005 : jamais de suppression, uniquement marquage "annulée". */
+    status: sqliteCore.text("status").notNull().default("validated"),
+    /** Référence l'opération d'annulation associée, le cas échéant. */
+    cancelledByTxn: sqliteCore.text("cancelled_by_txn"),
+    /** Motif saisi par l'opérateur lors de l'annulation (BR-005 : conservé sur l'opération elle-même,
+     *  aucune ligne supplémentaire n'est créée dans le journal). */
+    cancelReason: sqliteCore.text("cancel_reason"),
+    userId: sqliteCore.text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    /** Année scolaire en cours au moment de l'enregistrement — permet de filtrer
+     *  le journal de caisse par année scolaire (cohérent avec ENROLLMENTS). */
+    schoolYearId: sqliteCore.text("school_year_id").references(() => schoolYears.id, { onDelete: "restrict" }),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    createdAtIdx: sqliteCore.index("transactions_created_at_idx").on(table.createdAt),
+    studentIdx: sqliteCore.index("transactions_student_idx").on(table.studentId),
+    typeIdx: sqliteCore.index("transactions_type_idx").on(table.type),
+    schoolYearIdx: sqliteCore.index("transactions_school_year_idx").on(table.schoolYearId)
+  })
+);
+const receipts = sqliteCore.sqliteTable(
+  "RECEIPTS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    receiptNumber: sqliteCore.text("receipt_number").notNull(),
+    transactionId: sqliteCore.text("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+    amount: sqliteCore.integer("amount").notNull(),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso),
+    /** Nombre de réimpressions du reçu. */
+    printCount: sqliteCore.integer("print_count").notNull().default(0)
+  },
+  (table) => ({
+    receiptNumberUnique: sqliteCore.uniqueIndex("receipts_receipt_number_unique").on(table.receiptNumber),
+    transactionUnique: sqliteCore.uniqueIndex("receipts_transaction_unique").on(table.transactionId)
+  })
+);
 const printerConfig = sqliteCore.sqliteTable("PRINTER_CONFIG", {
   id: sqliteCore.text("id").primaryKey(),
   /** Impression thermique activée. Si `false`, on bascule directement sur le fallback PDF. */
@@ -340,65 +402,90 @@ const backupConfig = sqliteCore.sqliteTable("BACKUP_CONFIG", {
   lastBackupMessage: sqliteCore.text("last_backup_message"),
   updatedAt: sqliteCore.text("updated_at").notNull().$defaultFn(nowIso)
 });
-const backupHistory = sqliteCore.sqliteTable("BACKUP_HISTORY", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  driveFileId: sqliteCore.text("drive_file_id").notNull(),
-  fileName: sqliteCore.text("file_name").notNull(),
-  sizeBytes: sqliteCore.integer("size_bytes").notNull(),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  driveFileIdUnique: sqliteCore.uniqueIndex("backup_history_drive_file_id_unique").on(table.driveFileId),
-  createdAtIdx: sqliteCore.index("backup_history_created_at_idx").on(table.createdAt)
-}));
-const employees = sqliteCore.sqliteTable("EMPLOYEES", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  lastName: sqliteCore.text("last_name").notNull(),
-  firstName: sqliteCore.text("first_name").notNull(),
-  /** Fonction occupée. */
-  role: sqliteCore.text("role").notNull(),
-  phone: sqliteCore.text("phone"),
-  /** Salaire mensuel de référence, en FCFA. */
-  monthlySalary: sqliteCore.integer("monthly_salary").notNull(),
-  /** Soft delete, comme pour les élèves (cohérent avec BR-006). */
-  isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  nameIdx: sqliteCore.index("employees_name_idx").on(table.lastName, table.firstName)
-}));
-const salaryPayments = sqliteCore.sqliteTable("SALARY_PAYMENTS", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  employeeId: sqliteCore.text("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
-  schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "restrict" }),
-  /** 1-12 */
-  month: sqliteCore.integer("month").notNull(),
-  year: sqliteCore.integer("year").notNull(),
-  /** BR-008 : lien obligatoire avec la sortie de caisse correspondante. */
-  transactionId: sqliteCore.text("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
-  paidAt: sqliteCore.text("paid_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  // BR-009 : un même mois ne peut être marqué payé qu'une seule fois par employé.
-  employeeMonthYearUnique: sqliteCore.uniqueIndex("salary_payments_employee_month_year_unique").on(
-    table.employeeId,
-    table.month,
-    table.year
-  ),
-  transactionUnique: sqliteCore.uniqueIndex("salary_payments_transaction_unique").on(table.transactionId)
-}));
-const auditLog = sqliteCore.sqliteTable("AUDIT_LOG", {
-  id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
-  userId: sqliteCore.text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
-  /** ex: "create", "update", "delete", "print", "cancel"... */
-  action: sqliteCore.text("action").notNull(),
-  /** ex: "student", "transaction", "employee"... */
-  entityType: sqliteCore.text("entity_type").notNull(),
-  entityId: sqliteCore.text("entity_id").notNull(),
-  /** JSON sérialisé des changements (avant/après). */
-  details: sqliteCore.text("details"),
-  createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
-}, (table) => ({
-  entityIdx: sqliteCore.index("audit_log_entity_idx").on(table.entityType, table.entityId),
-  createdAtIdx: sqliteCore.index("audit_log_created_at_idx").on(table.createdAt)
-}));
+const employees = sqliteCore.sqliteTable(
+  "EMPLOYEES",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    lastName: sqliteCore.text("last_name").notNull(),
+    firstName: sqliteCore.text("first_name").notNull(),
+    /** Fonction occupée. */
+    role: sqliteCore.text("role").notNull(),
+    phone: sqliteCore.text("phone"),
+    /** Salaire mensuel de référence, en FCFA. */
+    monthlySalary: sqliteCore.integer("monthly_salary").notNull(),
+    /** Soft delete, comme pour les élèves (cohérent avec BR-006). */
+    isActive: sqliteCore.integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    nameIdx: sqliteCore.index("employees_name_idx").on(table.lastName, table.firstName)
+  })
+);
+const salaryPayments = sqliteCore.sqliteTable(
+  "SALARY_PAYMENTS",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    employeeId: sqliteCore.text("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    schoolYearId: sqliteCore.text("school_year_id").notNull().references(() => schoolYears.id, { onDelete: "restrict" }),
+    /** 1-12 */
+    month: sqliteCore.integer("month").notNull(),
+    year: sqliteCore.integer("year").notNull(),
+    /** BR-008 : lien obligatoire avec la sortie de caisse correspondante. */
+    transactionId: sqliteCore.text("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+    paidAt: sqliteCore.text("paid_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    // BR-009 : un même mois ne peut être marqué payé qu'une seule fois par employé.
+    employeeMonthYearUnique: sqliteCore.uniqueIndex("salary_payments_employee_month_year_unique").on(
+      table.employeeId,
+      table.month,
+      table.year
+    ),
+    transactionUnique: sqliteCore.uniqueIndex("salary_payments_transaction_unique").on(table.transactionId)
+  })
+);
+const salaryAdvances = sqliteCore.sqliteTable(
+  "SALARY_ADVANCES",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    employeeId: sqliteCore.text("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    amount: sqliteCore.integer("amount").notNull(),
+    reason: sqliteCore.text("reason"),
+    /** Sortie de caisse créée au moment de l'octroi (BR-008, étendu aux avances). */
+    transactionId: sqliteCore.text("transaction_id").notNull().references(() => transactions.id, { onDelete: "restrict" }),
+    /** 'pending' (non remboursée) | 'deducted' (déduite d'une paie) | 'cancelled' (annulée par erreur de saisie). */
+    status: sqliteCore.text("status").notNull().default("pending"),
+    /** Paiement de salaire lors duquel l'avance a été déduite, une fois remboursée. */
+    deductedInPaymentId: sqliteCore.text("deducted_in_payment_id").references(() => salaryPayments.id, {
+      onDelete: "set null"
+    }),
+    userId: sqliteCore.text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    employeeIdx: sqliteCore.index("salary_advances_employee_idx").on(table.employeeId),
+    statusIdx: sqliteCore.index("salary_advances_status_idx").on(table.status)
+  })
+);
+const auditLog = sqliteCore.sqliteTable(
+  "AUDIT_LOG",
+  {
+    id: sqliteCore.text("id").primaryKey().$defaultFn(generateId),
+    userId: sqliteCore.text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    /** ex: "create", "update", "delete", "print", "cancel"... */
+    action: sqliteCore.text("action").notNull(),
+    /** ex: "student", "transaction", "employee"... */
+    entityType: sqliteCore.text("entity_type").notNull(),
+    entityId: sqliteCore.text("entity_id").notNull(),
+    /** JSON sérialisé des changements (avant/après). */
+    details: sqliteCore.text("details"),
+    createdAt: sqliteCore.text("created_at").notNull().$defaultFn(nowIso)
+  },
+  (table) => ({
+    entityIdx: sqliteCore.index("audit_log_entity_idx").on(table.entityType, table.entityId),
+    createdAtIdx: sqliteCore.index("audit_log_created_at_idx").on(table.createdAt)
+  })
+);
 const usersRelations = drizzleOrm.relations(users, ({ many }) => ({
   studentsCreated: many(students),
   transactions: many(transactions),
@@ -454,7 +541,10 @@ const transactionsRelations = drizzleOrm.relations(transactions, ({ one }) => ({
   }),
   employee: one(employees, { fields: [transactions.employeeId], references: [employees.id] }),
   user: one(users, { fields: [transactions.userId], references: [users.id] }),
-  schoolYear: one(schoolYears, { fields: [transactions.schoolYearId], references: [schoolYears.id] }),
+  schoolYear: one(schoolYears, {
+    fields: [transactions.schoolYearId],
+    references: [schoolYears.id]
+  }),
   receipt: one(receipts, { fields: [transactions.id], references: [receipts.transactionId] }),
   salaryPayment: one(salaryPayments, {
     fields: [transactions.id],
@@ -469,7 +559,8 @@ const receiptsRelations = drizzleOrm.relations(receipts, ({ one }) => ({
 }));
 const employeesRelations = drizzleOrm.relations(employees, ({ many }) => ({
   transactions: many(transactions),
-  salaryPayments: many(salaryPayments)
+  salaryPayments: many(salaryPayments),
+  salaryAdvances: many(salaryAdvances)
 }));
 const salaryPaymentsRelations = drizzleOrm.relations(salaryPayments, ({ one }) => ({
   employee: one(employees, { fields: [salaryPayments.employeeId], references: [employees.id] }),
@@ -482,6 +573,18 @@ const salaryPaymentsRelations = drizzleOrm.relations(salaryPayments, ({ one }) =
     references: [transactions.id]
   })
 }));
+const salaryAdvancesRelations = drizzleOrm.relations(salaryAdvances, ({ one }) => ({
+  employee: one(employees, { fields: [salaryAdvances.employeeId], references: [employees.id] }),
+  transaction: one(transactions, {
+    fields: [salaryAdvances.transactionId],
+    references: [transactions.id]
+  }),
+  deductedInPayment: one(salaryPayments, {
+    fields: [salaryAdvances.deductedInPaymentId],
+    references: [salaryPayments.id]
+  }),
+  user: one(users, { fields: [salaryAdvances.userId], references: [users.id] })
+}));
 const auditLogRelations = drizzleOrm.relations(auditLog, ({ one }) => ({
   user: one(users, { fields: [auditLog.userId], references: [users.id] })
 }));
@@ -490,7 +593,6 @@ const schema = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   auditLog,
   auditLogRelations,
   backupConfig,
-  backupHistory,
   classes,
   classesRelations,
   employees,
@@ -499,9 +601,12 @@ const schema = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   enrollmentsRelations,
   guardians,
   guardiansRelations,
+  license,
   printerConfig,
   receipts,
   receiptsRelations,
+  salaryAdvances,
+  salaryAdvancesRelations,
   salaryPayments,
   salaryPaymentsRelations,
   schoolInfo,
@@ -540,13 +645,17 @@ function createConnection() {
 }
 function getDb() {
   if (!dbInstance) {
-    throw new Error("La base de données n'est pas initialisée. Appeler createConnection() au démarrage.");
+    throw new Error(
+      "La base de données n'est pas initialisée. Appeler createConnection() au démarrage."
+    );
   }
   return dbInstance;
 }
 function getSqlite() {
   if (!sqliteInstance) {
-    throw new Error("La base de données n'est pas initialisée. Appeler createConnection() au démarrage.");
+    throw new Error(
+      "La base de données n'est pas initialisée. Appeler createConnection() au démarrage."
+    );
   }
   return sqliteInstance;
 }
@@ -571,53 +680,9 @@ function runMigrations(db) {
   }
   migrator.migrate(db, { migrationsFolder });
 }
-const DEFAULT_CLASSES = [
-  "CI",
-  "CP",
-  "CE1",
-  "CE2",
-  "CM1",
-  "CM2",
-  "6ème",
-  "5ème",
-  "4ème",
-  "3ème",
-  "2nde",
-  "1ère",
-  "Tle"
-];
-const DEFAULT_ADMIN_USERNAME = "admin";
-const DEFAULT_ADMIN_PASSWORD = "admin123";
-function getDefaultSchoolYearLabel(date = /* @__PURE__ */ new Date()) {
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const startYear = month >= 9 ? year : year - 1;
-  return `${startYear}-${startYear + 1}`;
-}
-function seedDatabase(db) {
-  const existingUsers = db.select({ id: users.id }).from(users).limit(1).all();
-  if (existingUsers.length > 0) {
-    return;
-  }
-  console.log("[database] Base vierge détectée — insertion des données initiales...");
-  db.insert(classes).values(DEFAULT_CLASSES.map((name, index) => ({ id: generateId(), name, sortOrder: index + 1 }))).run();
-  db.insert(schoolYears).values({ id: generateId(), label: getDefaultSchoolYearLabel(), isCurrent: true }).run();
-  const passwordHash = bcrypt.hashSync(DEFAULT_ADMIN_PASSWORD, 10);
-  db.insert(users).values({
-    id: generateId(),
-    username: DEFAULT_ADMIN_USERNAME,
-    passwordHash,
-    fullName: "Administrateur",
-    mustChangePassword: true
-  }).run();
-  console.log(
-    `[database] Seed terminé : ${DEFAULT_CLASSES.length} classes, 1 année scolaire, utilisateur "${DEFAULT_ADMIN_USERNAME}" (mot de passe par défaut à changer au premier login).`
-  );
-}
 function initDatabase() {
   const { db } = createConnection();
   runMigrations(db);
-  seedDatabase(db);
   return db;
 }
 const IPC_CHANNELS = {
@@ -649,7 +714,10 @@ const IPC_CHANNELS = {
     getJournal: "cashbox:getJournal",
     getStudentAccount: "cashbox:getStudentAccount",
     listArrears: "cashbox:listArrears",
-    getReport: "cashbox:getReport",
+    getReportV2: "cashbox:getReportV2",
+    getTypeReport: "cashbox:getTypeReport",
+    getReportByClass: "cashbox:getReportByClass",
+    getReportByCashier: "cashbox:getReportByCashier",
     getReceipt: "cashbox:getReceipt",
     reprintReceipt: "cashbox:reprintReceipt",
     getBalance: "cashbox:getBalance",
@@ -663,7 +731,11 @@ const IPC_CHANNELS = {
     getById: "personnel:getById",
     markSalaryPaid: "personnel:markSalaryPaid",
     getSalaryStatus: "personnel:getSalaryStatus",
-    getSalaryHistory: "personnel:getSalaryHistory"
+    getSalaryHistory: "personnel:getSalaryHistory",
+    grantAdvance: "personnel:grantAdvance",
+    cancelAdvance: "personnel:cancelAdvance",
+    listAdvances: "personnel:listAdvances",
+    getPendingAdvance: "personnel:getPendingAdvance"
   },
   settings: {
     getCurrentSchoolYear: "settings:getCurrentSchoolYear",
@@ -671,6 +743,9 @@ const IPC_CHANNELS = {
     createSchoolYear: "settings:createSchoolYear",
     setCurrentSchoolYear: "settings:setCurrentSchoolYear",
     getClasses: "settings:getClasses",
+    createClass: "settings:createClass",
+    updateClass: "settings:updateClass",
+    deleteClass: "settings:deleteClass",
     getTuitionSchedule: "settings:getTuitionSchedule",
     saveTuitionSchedule: "settings:saveTuitionSchedule",
     getSchoolInfo: "settings:getSchoolInfo",
@@ -693,6 +768,8 @@ const IPC_CHANNELS = {
     printReceipt: "printer:printReceipt",
     testConnection: "printer:testConnection",
     openPdf: "printer:openPdf",
+    /** Ouvre tout fichier binaire déjà généré côté renderer (ex: export Excel) avec l'application par défaut du système. */
+    openFile: "printer:openFile",
     /** Configuration de l'imprimante thermique (Phase 9.2). */
     getConfig: "printer:getConfig",
     updateConfig: "printer:updateConfig",
@@ -709,6 +786,12 @@ const IPC_CHANNELS = {
     disconnectGoogleAccount: "backup:disconnectGoogleAccount",
     updateSettings: "backup:updateSettings"
   },
+  license: {
+    getStatus: "license:getStatus",
+    activate: "license:activate",
+    resync: "license:resync",
+    markOnboardingCompleted: "license:markOnboardingCompleted"
+  },
   dashboard: {
     /** Agrégat complet du tableau de bord financier (F-019, Phase 9.1). */
     getStats: "dashboard:getStats"
@@ -717,6 +800,265 @@ const IPC_CHANNELS = {
 function registerSystemIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.system.ping, async () => {
     return "pong";
+  });
+}
+function computeMachineFingerprint() {
+  const macAddresses = Object.values(node_os.networkInterfaces()).flat().filter(
+    (iface) => !!iface && !iface.internal && iface.mac !== "00:00:00:00:00:00"
+  ).map((iface) => iface.mac).sort();
+  const parts = [node_os.hostname(), node_os.platform(), node_os.arch(), ...macAddresses];
+  return node_crypto.createHash("sha256").update(parts.join("|")).digest("hex");
+}
+const LICENSE_ROW_ID = "singleton";
+const GRACE_PERIOD_DAYS = 3;
+const ALERT_THRESHOLDS_DAYS = { warning_15: 15, warning_7: 7, warning_1: 1 };
+const APP_PEPPER = "academyflow-license-v1";
+const DEV_BYPASS_LICENSE_KEY = "AF-DEV0-TEST-0000-0000";
+const DEV_BYPASS_VALIDITY_DAYS = 365;
+function deriveKey(salt, machineFingerprint) {
+  return node_crypto.scryptSync(`${machineFingerprint}:${APP_PEPPER}`, salt, 32);
+}
+function encryptPayload(payload) {
+  const salt = node_crypto.randomBytes(16);
+  const iv = node_crypto.randomBytes(12);
+  const key = deriveKey(salt, payload.machineFingerprint);
+  const cipher = node_crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), "utf-8"),
+    cipher.final()
+  ]);
+  const authTag = cipher.getAuthTag();
+  return [
+    salt.toString("hex"),
+    iv.toString("hex"),
+    authTag.toString("hex"),
+    ciphertext.toString("hex")
+  ].join(":");
+}
+function decryptPayload(blob, machineFingerprint) {
+  try {
+    const [saltHex, ivHex, authTagHex, ciphertextHex] = blob.split(":");
+    if (!saltHex || !ivHex || !authTagHex || !ciphertextHex) return null;
+    const salt = Buffer.from(saltHex, "hex");
+    const iv = Buffer.from(ivHex, "hex");
+    const authTag = Buffer.from(authTagHex, "hex");
+    const ciphertext = Buffer.from(ciphertextHex, "hex");
+    const key = deriveKey(salt, machineFingerprint);
+    const decipher = node_crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
+      "utf-8"
+    );
+    const payload = JSON.parse(plaintext);
+    if (payload.machineFingerprint !== machineFingerprint) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+function getRow() {
+  const db = getDb();
+  return db.select().from(license).where(drizzleOrm.eq(license.id, LICENSE_ROW_ID)).get() ?? null;
+}
+function upsertRow(fields) {
+  const db = getDb();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const existing = getRow();
+  if (existing) {
+    db.update(license).set({
+      machineFingerprint: fields.machineFingerprint,
+      encryptedPayload: fields.encryptedPayload,
+      ...fields.lastVerifiedAt !== void 0 ? { lastVerifiedAt: fields.lastVerifiedAt } : {},
+      ...fields.onboardingCompletedAt !== void 0 ? { onboardingCompletedAt: fields.onboardingCompletedAt } : {},
+      updatedAt: now
+    }).where(drizzleOrm.eq(license.id, LICENSE_ROW_ID)).run();
+  } else {
+    db.insert(license).values({
+      id: LICENSE_ROW_ID,
+      machineFingerprint: fields.machineFingerprint,
+      encryptedPayload: fields.encryptedPayload,
+      lastVerifiedAt: fields.lastVerifiedAt ?? null,
+      onboardingCompletedAt: fields.onboardingCompletedAt ?? null
+    }).run();
+  }
+}
+async function callRemoteActivation(licenseKey, machineFingerprint) {
+  if (!electron.app.isPackaged && licenseKey.trim().toUpperCase() === DEV_BYPASS_LICENSE_KEY) {
+    console.warn(
+      `[license] Clé de test développeur utilisée (${DEV_BYPASS_LICENSE_KEY}) — activation locale sans appel réseau. Ne fonctionne jamais dans un build packagé.`
+    );
+    const expiresAt = new Date(
+      Date.now() + DEV_BYPASS_VALIDITY_DAYS * 24 * 60 * 60 * 1e3
+    ).toISOString();
+    return { valid: true, expiresAt };
+  }
+  const apiUrl = process.env.LICENSE_API_URL;
+  if (!apiUrl) {
+    return {
+      valid: false,
+      error: "Serveur de licence non configuré (LICENSE_API_URL manquant)."
+    };
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1e4);
+    const response = await fetch(`${apiUrl}/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey, machineFingerprint }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      const body2 = await response.json().catch(() => null);
+      return {
+        valid: false,
+        error: body2?.error ?? "Clé de licence invalide ou déjà utilisée sur un autre poste."
+      };
+    }
+    const body = await response.json();
+    return { valid: true, expiresAt: body.expiresAt };
+  } catch {
+    return {
+      valid: false,
+      error: "Impossible de joindre le serveur de licence. Vérifiez votre connexion Internet et réessayez."
+    };
+  }
+}
+async function activateLicense(dto) {
+  const licenseKey = dto.licenseKey.trim();
+  if (!licenseKey) {
+    return { success: false, status: evaluateLicense(), error: "La clé de licence est requise." };
+  }
+  const machineFingerprint = computeMachineFingerprint();
+  const result = await callRemoteActivation(licenseKey, machineFingerprint);
+  if (!result.valid || !result.expiresAt) {
+    return { success: false, status: evaluateLicense(), error: result.error };
+  }
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const payload = {
+    licenseKey,
+    activatedAt: now,
+    expiresAt: result.expiresAt,
+    lastKnownDate: now,
+    machineFingerprint
+  };
+  upsertRow({
+    machineFingerprint,
+    encryptedPayload: encryptPayload(payload),
+    lastVerifiedAt: now
+  });
+  console.log(`[license] Licence activée, expire le ${result.expiresAt}.`);
+  return { success: true, status: evaluateLicense() };
+}
+function touchClockRatchet() {
+  const row = getRow();
+  if (!row) return;
+  const machineFingerprint = computeMachineFingerprint();
+  const payload = decryptPayload(row.encryptedPayload, machineFingerprint);
+  if (!payload) return;
+  const now = /* @__PURE__ */ new Date();
+  const lastKnown = new Date(payload.lastKnownDate);
+  if (now.getTime() < lastKnown.getTime()) {
+    console.warn(
+      `[license] Recul d'horloge détecté : horloge système à ${now.toISOString()}, dernière date connue ${payload.lastKnownDate}.`
+    );
+    return;
+  }
+  const updated = { ...payload, lastKnownDate: now.toISOString() };
+  upsertRow({ machineFingerprint, encryptedPayload: encryptPayload(updated) });
+}
+async function resyncLicense() {
+  const row = getRow();
+  if (!row) return;
+  const machineFingerprint = computeMachineFingerprint();
+  const payload = decryptPayload(row.encryptedPayload, machineFingerprint);
+  if (!payload) return;
+  const result = await callRemoteActivation(payload.licenseKey, machineFingerprint);
+  if (!result.valid || !result.expiresAt) return;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const updated = { ...payload, expiresAt: result.expiresAt, lastKnownDate: now };
+  upsertRow({ machineFingerprint, encryptedPayload: encryptPayload(updated), lastVerifiedAt: now });
+}
+function computeAlertLevel(daysRemaining) {
+  if (daysRemaining <= ALERT_THRESHOLDS_DAYS.warning_1) return "warning_1";
+  if (daysRemaining <= ALERT_THRESHOLDS_DAYS.warning_7) return "warning_7";
+  if (daysRemaining <= ALERT_THRESHOLDS_DAYS.warning_15) return "warning_15";
+  return "none";
+}
+function evaluateLicense() {
+  const row = getRow();
+  if (!row) {
+    return {
+      state: "not_activated",
+      expiresAt: null,
+      daysRemaining: null,
+      alertLevel: "none",
+      lastVerifiedAt: null,
+      onboardingCompleted: false
+    };
+  }
+  const machineFingerprint = computeMachineFingerprint();
+  const payload = decryptPayload(row.encryptedPayload, machineFingerprint);
+  const onboardingCompleted = row.onboardingCompletedAt !== null;
+  if (!payload) {
+    return {
+      state: "invalid",
+      expiresAt: null,
+      daysRemaining: null,
+      alertLevel: "none",
+      lastVerifiedAt: row.lastVerifiedAt,
+      onboardingCompleted
+    };
+  }
+  const now = /* @__PURE__ */ new Date();
+  const lastKnown = new Date(payload.lastKnownDate);
+  if (now.getTime() < lastKnown.getTime()) {
+    return {
+      state: "invalid",
+      expiresAt: null,
+      daysRemaining: null,
+      alertLevel: "none",
+      lastVerifiedAt: row.lastVerifiedAt,
+      onboardingCompleted
+    };
+  }
+  const expiresAt = new Date(payload.expiresAt);
+  const msPerDay = 24 * 60 * 60 * 1e3;
+  const daysRemaining = Math.ceil((expiresAt.getTime() - now.getTime()) / msPerDay);
+  const graceDeadline = new Date(expiresAt.getTime() + GRACE_PERIOD_DAYS * msPerDay);
+  const state = now.getTime() <= graceDeadline.getTime() ? "active" : "readonly";
+  return {
+    state,
+    expiresAt: payload.expiresAt,
+    daysRemaining,
+    alertLevel: state === "active" ? computeAlertLevel(daysRemaining) : "none",
+    lastVerifiedAt: row.lastVerifiedAt,
+    onboardingCompleted
+  };
+}
+function markOnboardingCompleted() {
+  const row = getRow();
+  if (!row) {
+    throw new Error("Impossible de terminer la configuration : aucune licence activée.");
+  }
+  const db = getDb();
+  db.update(license).set({ onboardingCompletedAt: (/* @__PURE__ */ new Date()).toISOString(), updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(drizzleOrm.eq(license.id, LICENSE_ROW_ID)).run();
+}
+function registerLicenseIpcHandlers() {
+  electron.ipcMain.handle(IPC_CHANNELS.license.getStatus, async () => {
+    return evaluateLicense();
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.license.activate, async (_event, dto) => {
+    return activateLicense(dto);
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.license.resync, async () => {
+    await resyncLicense();
+    return evaluateLicense();
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.license.markOnboardingCompleted, async () => {
+    markOnboardingCompleted();
+    return evaluateLicense();
   });
 }
 const MATRICULE_LENGTH = 8;
@@ -796,7 +1138,9 @@ function requireCurrentSchoolYearId$1() {
   const db = getDb();
   const year = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.isCurrent, true)).get();
   if (!year) {
-    throw new Error("Aucune année scolaire active. Configurez-en une dans Paramètres avant d'inscrire un élève.");
+    throw new Error(
+      "Aucune année scolaire active. Configurez-en une dans Paramètres avant d'inscrire un élève."
+    );
   }
   return year.id;
 }
@@ -813,12 +1157,48 @@ function toStudent(row) {
     nationality: row.nationality,
     address: row.address,
     previousSchool: row.previousSchool,
-    status: row.status,
     isActive: row.isActive,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy
   };
+}
+function getEnrollmentHistoryStatus(studentId, schoolYearId) {
+  const db = getDb();
+  const studentEnrollments = db.select({ schoolYearId: enrollments.schoolYearId, label: schoolYears.label }).from(enrollments).innerJoin(schoolYears, drizzleOrm.eq(schoolYears.id, enrollments.schoolYearId)).where(drizzleOrm.eq(enrollments.studentId, studentId)).orderBy(schoolYears.label).all();
+  if (studentEnrollments.length === 0) return "nouveau";
+  const targetIndex = studentEnrollments.findIndex((e) => e.schoolYearId === schoolYearId);
+  if (targetIndex === -1) {
+    const targetLabel = db.select({ label: schoolYears.label }).from(schoolYears).where(drizzleOrm.eq(schoolYears.id, schoolYearId)).get();
+    if (!targetLabel) return "nouveau";
+    return studentEnrollments.some((e) => e.label < targetLabel.label) ? "ancien" : "nouveau";
+  }
+  return targetIndex === 0 ? "nouveau" : "ancien";
+}
+function getOverallHistoryStatus(studentId) {
+  const db = getDb();
+  const count = db.select({ count: drizzleOrm.sql`count(*)` }).from(enrollments).where(drizzleOrm.eq(enrollments.studentId, studentId)).get();
+  return (count?.count ?? 0) > 1 ? "ancien" : "nouveau";
+}
+function batchGetEnrollmentHistoryStatus(studentIds, schoolYearId) {
+  const db = getDb();
+  const result = /* @__PURE__ */ new Map();
+  if (studentIds.length === 0) return result;
+  const rows = db.select({ studentId: enrollments.studentId, label: schoolYears.label }).from(enrollments).innerJoin(schoolYears, drizzleOrm.eq(schoolYears.id, enrollments.schoolYearId)).where(drizzleOrm.inArray(enrollments.studentId, studentIds)).all();
+  const firstLabelByStudent = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const current = firstLabelByStudent.get(row.studentId);
+    if (!current || row.label < current) firstLabelByStudent.set(row.studentId, row.label);
+  }
+  const targetYear = db.select({ label: schoolYears.label }).from(schoolYears).where(drizzleOrm.eq(schoolYears.id, schoolYearId)).get();
+  for (const studentId of studentIds) {
+    const firstLabel = firstLabelByStudent.get(studentId);
+    result.set(
+      studentId,
+      !firstLabel || firstLabel >= (targetYear?.label ?? "") ? "nouveau" : "ancien"
+    );
+  }
+  return result;
 }
 function checkDuplicate(firstName, lastName, schoolYearId) {
   const db = getDb();
@@ -850,8 +1230,6 @@ function create$1(data) {
   }
   const studentId = generateId();
   const matricule = generateMatricule();
-  const status = data.status ?? "nouveau";
-  const enrollmentStatus = status === "redoublant" ? "redoublant" : "admis";
   db.transaction((tx) => {
     tx.insert(students).values({
       id: studentId,
@@ -865,7 +1243,6 @@ function create$1(data) {
       nationality: data.nationality ?? "Béninoise",
       address: data.address ?? null,
       previousSchool: data.previousSchool ?? null,
-      status,
       createdBy: data.createdBy
     }).run();
     tx.insert(guardians).values(
@@ -884,10 +1261,18 @@ function create$1(data) {
       studentId,
       schoolYearId,
       classId: data.classId,
-      status: enrollmentStatus
+      // Un élève créé pour la première fois est toujours 'admis' — le
+      // redoublement est une décision de passage de classe (F-004/F-005),
+      // qui ne peut concerner qu'une inscription *suivante*.
+      status: "admis"
     }).run();
   });
-  logAction({ userId: data.createdBy, action: "create", entityType: "student", entityId: studentId });
+  logAction({
+    userId: data.createdBy,
+    action: "create",
+    entityType: "student",
+    entityId: studentId
+  });
   const created = findById(studentId);
   if (!created) throw new Error("Échec de la récupération de l'élève après création.");
   return created;
@@ -922,7 +1307,11 @@ function findById(id) {
   const db = getDb();
   const row = db.select().from(students).where(drizzleOrm.eq(students.id, id)).get();
   if (!row) return null;
-  return { ...toStudent(row), guardians: getGuardiansForStudent(id) };
+  return {
+    ...toStudent(row),
+    guardians: getGuardiansForStudent(id),
+    historyStatus: getOverallHistoryStatus(id)
+  };
 }
 function getCurrentClassName(studentId) {
   const db = getDb();
@@ -948,12 +1337,20 @@ function search(query) {
   if (query.query && query.query.trim()) {
     const term = `%${query.query.trim()}%`;
     conditions.push(
-      drizzleOrm.or(drizzleOrm.like(students.lastName, term), drizzleOrm.like(students.firstName, term), drizzleOrm.like(students.matricule, term))
+      drizzleOrm.or(
+        drizzleOrm.like(students.lastName, term),
+        drizzleOrm.like(students.firstName, term),
+        drizzleOrm.like(students.matricule, term)
+      )
     );
   }
   let classNameByStudentId = null;
   if (query.schoolYearId) {
-    const enrollmentRows = db.select({ studentId: enrollments.studentId, classId: enrollments.classId, className: classes.name }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).where(drizzleOrm.eq(enrollments.schoolYearId, query.schoolYearId)).all();
+    const enrollmentRows = db.select({
+      studentId: enrollments.studentId,
+      classId: enrollments.classId,
+      className: classes.name
+    }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).where(drizzleOrm.eq(enrollments.schoolYearId, query.schoolYearId)).all();
     classNameByStudentId = new Map(enrollmentRows.map((r) => [r.studentId, r.className]));
     if (query.classId) {
       const allowedIds = new Set(
@@ -968,10 +1365,15 @@ function search(query) {
   const rows = db.select().from(students).where(drizzleOrm.and(...conditions)).orderBy(students.lastName, students.firstName).all().filter((row) => !classNameByStudentId || classNameByStudentId.has(row.id));
   const total = rows.length;
   const paged = rows.slice((page - 1) * pageSize, page * pageSize);
+  const historyStatusById = query.schoolYearId ? batchGetEnrollmentHistoryStatus(
+    paged.map((r) => r.id),
+    query.schoolYearId
+  ) : null;
   return {
     items: paged.map((row) => ({
       ...toStudent(row),
-      className: classNameByStudentId?.get(row.id) ?? null
+      className: classNameByStudentId?.get(row.id) ?? null,
+      historyStatus: historyStatusById?.get(row.id)
     })),
     total,
     page,
@@ -999,12 +1401,16 @@ function countStudents(schoolYearId, classId) {
   const db = getDb();
   const conditions = [drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true)];
   if (classId) conditions.push(drizzleOrm.eq(enrollments.classId, classId));
-  const rows = db.select({ status: students.status, gender: students.gender }).from(enrollments).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(...conditions)).all();
+  const rows = db.select({ studentId: students.id, gender: students.gender }).from(enrollments).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(...conditions)).all();
+  const historyStatusById = batchGetEnrollmentHistoryStatus(
+    rows.map((r) => r.studentId),
+    schoolYearId
+  );
   let nouveaux = 0;
   let male = 0;
   let female = 0;
   for (const row of rows) {
-    if (row.status === "nouveau") nouveaux += 1;
+    if (historyStatusById.get(row.studentId) === "nouveau") nouveaux += 1;
     if (row.gender === "M") male += 1;
     else if (row.gender === "F") female += 1;
   }
@@ -1024,20 +1430,41 @@ function getStats$2(query = {}) {
     total: trend2(current.total, previous.total),
     anciens: trend2(current.anciens, previous.anciens),
     nouveaux: trend2(current.nouveaux, previous.nouveaux),
-    male: { count: current.male, percentage: current.total > 0 ? current.male / current.total * 100 : 0 },
-    female: { count: current.female, percentage: current.total > 0 ? current.female / current.total * 100 : 0 }
+    male: {
+      count: current.male,
+      percentage: current.total > 0 ? current.male / current.total * 100 : 0
+    },
+    female: {
+      count: current.female,
+      percentage: current.total > 0 ? current.female / current.total * 100 : 0
+    }
   };
 }
 function listByClass(classId, schoolYearId) {
   const db = getDb();
   const rows = db.select({ student: students }).from(enrollments).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(
-    drizzleOrm.and(drizzleOrm.eq(enrollments.classId, classId), drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true))
+    drizzleOrm.and(
+      drizzleOrm.eq(enrollments.classId, classId),
+      drizzleOrm.eq(enrollments.schoolYearId, schoolYearId),
+      drizzleOrm.eq(students.isActive, true)
+    )
   ).orderBy(students.lastName, students.firstName).all();
-  return rows.map(({ student: row }) => toStudent(row));
+  const historyStatusById = batchGetEnrollmentHistoryStatus(
+    rows.map((r) => r.student.id),
+    schoolYearId
+  );
+  return rows.map(({ student: row }) => ({
+    ...toStudent(row),
+    historyStatus: historyStatusById.get(row.id)
+  }));
 }
 function getHistory(studentId) {
   const db = getDb();
-  const rows = db.select({ enrollment: enrollments, className: classes.name, schoolYearLabel: schoolYears.label }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).innerJoin(schoolYears, drizzleOrm.eq(schoolYears.id, enrollments.schoolYearId)).where(drizzleOrm.eq(enrollments.studentId, studentId)).orderBy(schoolYears.label).all();
+  const rows = db.select({
+    enrollment: enrollments,
+    className: classes.name,
+    schoolYearLabel: schoolYears.label
+  }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).innerJoin(schoolYears, drizzleOrm.eq(schoolYears.id, enrollments.schoolYearId)).where(drizzleOrm.eq(enrollments.studentId, studentId)).orderBy(schoolYears.label).all();
   return rows.map(({ enrollment, className, schoolYearLabel }) => ({
     ...enrollment,
     status: enrollment.status,
@@ -1047,7 +1474,12 @@ function getHistory(studentId) {
 }
 function createEnrollment(data) {
   const db = getDb();
-  const existing = db.select({ id: enrollments.id }).from(enrollments).where(drizzleOrm.and(drizzleOrm.eq(enrollments.studentId, data.studentId), drizzleOrm.eq(enrollments.schoolYearId, data.schoolYearId))).get();
+  const existing = db.select({ id: enrollments.id }).from(enrollments).where(
+    drizzleOrm.and(
+      drizzleOrm.eq(enrollments.studentId, data.studentId),
+      drizzleOrm.eq(enrollments.schoolYearId, data.schoolYearId)
+    )
+  ).get();
   if (existing) {
     throw new Error("BR-003 : cet élève a déjà un statut de progression pour cette année scolaire.");
   }
@@ -1075,13 +1507,21 @@ function promoteStudents(data) {
     let repeated = 0;
     for (const decision of data.decisions) {
       const sourceEnrollment = tx.select().from(enrollments).where(
-        drizzleOrm.and(drizzleOrm.eq(enrollments.studentId, decision.studentId), drizzleOrm.eq(enrollments.schoolYearId, data.sourceSchoolYearId))
+        drizzleOrm.and(
+          drizzleOrm.eq(enrollments.studentId, decision.studentId),
+          drizzleOrm.eq(enrollments.schoolYearId, data.sourceSchoolYearId)
+        )
       ).get();
       if (!sourceEnrollment) {
-        throw new Error(`Élève ${decision.studentId} : aucune inscription trouvée pour l'année source.`);
+        throw new Error(
+          `Élève ${decision.studentId} : aucune inscription trouvée pour l'année source.`
+        );
       }
       const alreadyEnrolled = tx.select({ id: enrollments.id }).from(enrollments).where(
-        drizzleOrm.and(drizzleOrm.eq(enrollments.studentId, decision.studentId), drizzleOrm.eq(enrollments.schoolYearId, data.targetSchoolYearId))
+        drizzleOrm.and(
+          drizzleOrm.eq(enrollments.studentId, decision.studentId),
+          drizzleOrm.eq(enrollments.schoolYearId, data.targetSchoolYearId)
+        )
       ).get();
       if (alreadyEnrolled) {
         throw new Error(
@@ -1093,7 +1533,9 @@ function promoteStudents(data) {
         const currentIndex = allClasses.findIndex((c) => c.id === sourceEnrollment.classId);
         const nextClass = currentIndex >= 0 ? allClasses[currentIndex + 1] : void 0;
         if (!nextClass) {
-          throw new Error(`Élève ${decision.studentId} : pas de classe supérieure disponible (fin de cursus).`);
+          throw new Error(
+            `Élève ${decision.studentId} : pas de classe supérieure disponible (fin de cursus).`
+          );
         }
         targetClassId = nextClass.id;
         promoted += 1;
@@ -1208,7 +1650,9 @@ function changePassword(userId, oldPassword, newPassword) {
     throw new Error("Mot de passe actuel incorrect.");
   }
   if (newPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new Error(`Le nouveau mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`);
+    throw new Error(
+      `Le nouveau mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`
+    );
   }
   const passwordHash = bcrypt.hashSync(newPassword, 10);
   db.update(users).set({ passwordHash, mustChangePassword: false }).where(drizzleOrm.eq(users.id, userId)).run();
@@ -1225,14 +1669,15 @@ function createUser(data) {
   }
   const id = generateId();
   const passwordHash = bcrypt.hashSync(data.password, 10);
+  const mustChangePassword = !data.skipMustChangePassword;
   db.insert(users).values({
     id,
     username: data.username,
     passwordHash,
     fullName: data.fullName,
-    mustChangePassword: true
+    mustChangePassword
   }).run();
-  return { id, username: data.username, fullName: data.fullName, mustChangePassword: true };
+  return { id, username: data.username, fullName: data.fullName, mustChangePassword };
 }
 function toUserAccount(row) {
   return {
@@ -1326,9 +1771,12 @@ function registerStudentsIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.students.create, async (_event, data) => {
     return create$1({ ...data, createdBy: requireCurrentUserId$2() });
   });
-  electron.ipcMain.handle(IPC_CHANNELS.students.update, async (_event, id, data) => {
-    return update$1(id, data, requireCurrentUserId$2());
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.students.update,
+    async (_event, id, data) => {
+      return update$1(id, data, requireCurrentUserId$2());
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.students.delete, async (_event, id) => {
     softDelete$1(id, requireCurrentUserId$2());
   });
@@ -1341,9 +1789,12 @@ function registerStudentsIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.students.getStats, async (_event, query) => {
     return getStats$2(query);
   });
-  electron.ipcMain.handle(IPC_CHANNELS.students.listEnrollmentClassNames, async (_event, schoolYearId) => {
-    return listEnrollmentClassNames(schoolYearId);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.students.listEnrollmentClassNames,
+    async (_event, schoolYearId) => {
+      return listEnrollmentClassNames(schoolYearId);
+    }
+  );
   electron.ipcMain.handle(
     IPC_CHANNELS.students.listByClass,
     async (_event, classId, schoolYearId) => {
@@ -1365,9 +1816,12 @@ function registerStudentsIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.students.deleteGuardian, async (_event, guardianId) => {
     deleteGuardian(guardianId);
   });
-  electron.ipcMain.handle(IPC_CHANNELS.students.createEnrollment, async (_event, data) => {
-    return createEnrollment(data);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.students.createEnrollment,
+    async (_event, data) => {
+      return createEnrollment(data);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.students.getEnrollmentHistory, async (_event, studentId) => {
     return getHistory(studentId);
   });
@@ -1377,9 +1831,12 @@ function registerStudentsIpcHandlers() {
       return checkDuplicate(firstName, lastName, schoolYearId);
     }
   );
-  electron.ipcMain.handle(IPC_CHANNELS.students.promoteStudents, async (_event, data) => {
-    return promoteStudents(data);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.students.promoteStudents,
+    async (_event, data) => {
+      return promoteStudents(data);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.students.hasFinancialHistory, async (_event, studentId) => {
     return hasFinancialHistory(studentId);
   });
@@ -1426,6 +1883,115 @@ function incrementPrintCount(transactionId) {
   if (!updated) throw new Error("Échec de la mise à jour du compteur de réimpression.");
   return updated;
 }
+function getCurrentSchoolYearId() {
+  const db = getDb();
+  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.isCurrent, true)).get();
+  return year?.id ?? null;
+}
+function getCurrentEnrollment(studentId, schoolYearId) {
+  const db = getDb();
+  return db.select({ classId: enrollments.classId, className: classes.name }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.studentId, studentId), drizzleOrm.eq(enrollments.schoolYearId, schoolYearId))).get();
+}
+function computeAccount(studentId, classId, schoolYearId) {
+  const db = getDb();
+  const schedule = db.select({ id: tuitionSchedules.id }).from(tuitionSchedules).where(
+    drizzleOrm.and(drizzleOrm.eq(tuitionSchedules.classId, classId), drizzleOrm.eq(tuitionSchedules.schoolYearId, schoolYearId))
+  ).get();
+  if (!schedule) {
+    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
+  }
+  const installmentRows = db.select().from(tuitionInstallments).where(drizzleOrm.eq(tuitionInstallments.scheduleId, schedule.id)).orderBy(tuitionInstallments.sortOrder).all();
+  const historyStatus = getEnrollmentHistoryStatus(studentId, schoolYearId);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const lines = installmentRows.map((installment) => {
+    const payments = db.select({ amount: transactions.amount }).from(transactions).where(
+      drizzleOrm.and(
+        drizzleOrm.eq(transactions.installmentId, installment.id),
+        drizzleOrm.eq(transactions.studentId, studentId),
+        drizzleOrm.eq(transactions.type, "entry"),
+        drizzleOrm.eq(transactions.status, "validated")
+      )
+    ).all();
+    const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+    const isLate = installment.dueDate < today && paidAmount < installment.amount;
+    const appliesTo = installment.appliesTo;
+    const isRelevant = appliesTo === "tous" || appliesTo === historyStatus || paidAmount > 0;
+    if (!isRelevant) return null;
+    return {
+      installmentId: installment.id,
+      label: installment.label,
+      dueDate: installment.dueDate,
+      expectedAmount: installment.amount,
+      paidAmount,
+      status: isLate ? "en_arriere" : "a_jour",
+      appliesTo
+    };
+  }).filter((line) => line !== null);
+  const totalExpected = lines.reduce((sum, l) => sum + l.expectedAmount, 0);
+  const totalPaid = lines.reduce((sum, l) => sum + l.paidAmount, 0);
+  return {
+    studentId,
+    installments: lines,
+    totalExpected,
+    totalPaid,
+    balance: totalExpected - totalPaid
+  };
+}
+function getStudentAccount(studentId) {
+  const schoolYearId = getCurrentSchoolYearId();
+  if (!schoolYearId) {
+    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
+  }
+  const enrollment = getCurrentEnrollment(studentId, schoolYearId);
+  if (!enrollment) {
+    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
+  }
+  return computeAccount(studentId, enrollment.classId, schoolYearId);
+}
+function getArrearsStudents() {
+  const db = getDb();
+  const schoolYearId = getCurrentSchoolYearId();
+  if (!schoolYearId) return [];
+  const activeEnrollments = db.select({
+    studentId: enrollments.studentId,
+    classId: enrollments.classId,
+    className: classes.name,
+    matricule: students.matricule,
+    lastName: students.lastName,
+    firstName: students.firstName
+  }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true))).all();
+  const result = [];
+  for (const row of activeEnrollments) {
+    const account = computeAccount(row.studentId, row.classId, schoolYearId);
+    const lateInstallmentsCount = account.installments.filter(
+      (l) => l.status === "en_arriere"
+    ).length;
+    if (lateInstallmentsCount > 0) {
+      result.push({
+        ...account,
+        matricule: row.matricule,
+        studentName: `${row.lastName} ${row.firstName}`,
+        className: row.className,
+        lateInstallmentsCount
+      });
+    }
+  }
+  return result;
+}
+function getGlobalRecoveryStats() {
+  const db = getDb();
+  const schoolYearId = getCurrentSchoolYearId();
+  if (!schoolYearId) return { totalExpected: 0, totalPaid: 0 };
+  const activeEnrollments = db.select({ studentId: enrollments.studentId, classId: enrollments.classId }).from(enrollments).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true))).all();
+  let totalExpected = 0;
+  let totalPaid = 0;
+  for (const row of activeEnrollments) {
+    const account = computeAccount(row.studentId, row.classId, schoolYearId);
+    totalExpected += account.totalExpected;
+    totalPaid += account.totalPaid;
+  }
+  return { totalExpected, totalPaid };
+}
 const CASH_ENTRY_CATEGORIES = [
   "frais_inscription",
   "scolarite",
@@ -1436,6 +2002,7 @@ const CASH_ENTRY_CATEGORIES = [
 const CASH_EXIT_CATEGORIES = [
   "depense_quotidienne",
   "salaire",
+  "avance_salaire",
   "achat_fournitures",
   "charge_diverse"
 ];
@@ -1447,6 +2014,7 @@ const CASH_CATEGORY_LABELS = {
   autre_recette: "Autre recette",
   depense_quotidienne: "Dépense quotidienne",
   salaire: "Salaire",
+  avance_salaire: "Avance sur salaire",
   achat_fournitures: "Achat de fournitures",
   charge_diverse: "Charge diverse"
 };
@@ -1516,7 +2084,12 @@ function createEntry(data) {
     const receipt = insertReceipt(tx, transactionId, data.amount);
     return receipt;
   });
-  logAction({ userId: data.userId, action: "create", entityType: "transaction", entityId: transactionId });
+  logAction({
+    userId: data.userId,
+    action: "create",
+    entityType: "transaction",
+    entityId: transactionId
+  });
   const row = db.select().from(transactions).where(drizzleOrm.eq(transactions.id, transactionId)).get();
   if (!row) throw new Error("Échec de la récupération de l'entrée après création.");
   return { transaction: toTransaction(row), receipt: result };
@@ -1547,7 +2120,12 @@ function createExit(data) {
     userId: data.userId,
     schoolYearId
   }).run();
-  logAction({ userId: data.userId, action: "create", entityType: "transaction", entityId: transactionId });
+  logAction({
+    userId: data.userId,
+    action: "create",
+    entityType: "transaction",
+    entityId: transactionId
+  });
   const row = db.select().from(transactions).where(drizzleOrm.eq(transactions.id, transactionId)).get();
   if (!row) throw new Error("Échec de la récupération de la sortie après création.");
   return toTransaction(row);
@@ -1589,15 +2167,13 @@ function getJournal(filters) {
   const page = filters.page && filters.page > 0 ? filters.page : 1;
   const pageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : DEFAULT_PAGE_SIZE;
   const balanceAfterByTxnId = /* @__PURE__ */ new Map();
-  if (filters.schoolYearId) {
-    const allYearRows = db.select().from(transactions).where(drizzleOrm.eq(transactions.schoolYearId, filters.schoolYearId)).orderBy(transactions.createdAt, transactions.id).all();
-    let running = 0;
-    for (const row of allYearRows) {
-      if (row.status === "validated") {
-        running += row.type === "entry" ? row.amount : -row.amount;
-      }
-      balanceAfterByTxnId.set(row.id, running);
+  const allRows = db.select().from(transactions).orderBy(transactions.createdAt, transactions.id).all();
+  let running = 0;
+  for (const row of allRows) {
+    if (row.status === "validated") {
+      running += row.type === "entry" ? row.amount : -row.amount;
     }
+    balanceAfterByTxnId.set(row.id, running);
   }
   const conditions = [];
   if (filters.schoolYearId) conditions.push(drizzleOrm.eq(transactions.schoolYearId, filters.schoolYearId));
@@ -1607,6 +2183,12 @@ function getJournal(filters) {
   if (filters.studentId) conditions.push(drizzleOrm.eq(transactions.studentId, filters.studentId));
   if (filters.dateFrom) conditions.push(drizzleOrm.gte(transactions.createdAt, filters.dateFrom));
   if (filters.dateTo) conditions.push(drizzleOrm.lte(transactions.createdAt, filters.dateTo));
+  if (filters.classId) {
+    const studentIds = getStudentIdsForClass(filters.classId);
+    conditions.push(
+      studentIds.length > 0 ? drizzleOrm.inArray(transactions.studentId, studentIds) : drizzleOrm.eq(transactions.id, "")
+    );
+  }
   let studentIdsMatchingQuery = null;
   if (filters.query && filters.query.trim()) {
     const term = `%${filters.query.trim()}%`;
@@ -1622,7 +2204,10 @@ function getJournal(filters) {
   const total = rows.length;
   const paged = rows.slice((page - 1) * pageSize, page * pageSize);
   return {
-    items: paged.map((row) => ({ ...toTransaction(row), balanceAfter: balanceAfterByTxnId.get(row.id) ?? 0 })),
+    items: paged.map((row) => ({
+      ...toTransaction(row),
+      balanceAfter: balanceAfterByTxnId.get(row.id) ?? 0
+    })),
     total,
     page,
     pageSize
@@ -1638,7 +2223,7 @@ function getBalance(schoolYearId) {
 function getStats$1(schoolYearId) {
   const db = getDb();
   const { from, to } = todayRange(/* @__PURE__ */ new Date());
-  const balance = getBalance(schoolYearId);
+  const balance = getBalance();
   const todayConditions = [
     drizzleOrm.eq(transactions.status, "validated"),
     drizzleOrm.gte(transactions.createdAt, from),
@@ -1654,125 +2239,230 @@ function getStats$1(schoolYearId) {
   }
   return { balance, todayEntries, todayExits };
 }
-function getReport(from, to) {
+function getBalanceBefore(beforeDate) {
   const db = getDb();
-  const rows = db.select().from(transactions).where(
-    drizzleOrm.and(
-      drizzleOrm.eq(transactions.status, "validated"),
-      drizzleOrm.gte(transactions.createdAt, from),
-      drizzleOrm.lte(transactions.createdAt, `${to}T23:59:59.999Z`)
-    )
-  ).all();
+  const rows = db.select({ type: transactions.type, amount: transactions.amount }).from(transactions).where(drizzleOrm.and(drizzleOrm.eq(transactions.status, "validated"), drizzleOrm.lt(transactions.createdAt, beforeDate))).all();
+  return rows.reduce((sum, row) => sum + (row.type === "entry" ? row.amount : -row.amount), 0);
+}
+function computeGrowthPct$1(current, previous) {
+  if (previous === 0) return null;
+  return (current - previous) / previous * 100;
+}
+function getStudentIdsForClass(classId) {
+  const db = getDb();
+  const currentYear = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.isCurrent, true)).get();
+  if (!currentYear) return [];
+  const rows = db.select({ studentId: enrollments.studentId }).from(enrollments).where(drizzleOrm.and(drizzleOrm.eq(enrollments.classId, classId), drizzleOrm.eq(enrollments.schoolYearId, currentYear.id))).all();
+  return rows.map((r) => r.studentId);
+}
+function getPreviousPeriod(from, to) {
+  const fromDate = /* @__PURE__ */ new Date(`${from}T00:00:00.000Z`);
+  const toDate = /* @__PURE__ */ new Date(`${to}T00:00:00.000Z`);
+  const durationMs = toDate.getTime() - fromDate.getTime();
+  const prevTo = new Date(fromDate.getTime() - 24 * 60 * 60 * 1e3);
+  const prevFrom = new Date(prevTo.getTime() - durationMs);
+  return {
+    prevFrom: prevFrom.toISOString().slice(0, 10),
+    prevTo: prevTo.toISOString().slice(0, 10)
+  };
+}
+function buildReportConditions(from, to, filters) {
+  const conditions = [
+    drizzleOrm.eq(transactions.status, "validated"),
+    drizzleOrm.gte(transactions.createdAt, from),
+    drizzleOrm.lte(transactions.createdAt, `${to}T23:59:59.999Z`)
+  ];
+  if (filters.category) conditions.push(drizzleOrm.eq(transactions.category, filters.category));
+  if (filters.userId) conditions.push(drizzleOrm.eq(transactions.userId, filters.userId));
+  if (filters.classId) {
+    const studentIds = getStudentIdsForClass(filters.classId);
+    conditions.push(
+      studentIds.length > 0 ? drizzleOrm.inArray(transactions.studentId, studentIds) : drizzleOrm.eq(transactions.id, "")
+    );
+  }
+  return conditions;
+}
+function getPeriodTotals(from, to, filters) {
+  const db = getDb();
+  const rows = db.select({ type: transactions.type, amount: transactions.amount }).from(transactions).where(drizzleOrm.and(...buildReportConditions(from, to, filters))).all();
   let totalEntries = 0;
   let totalExits = 0;
-  const byCategory = {};
   for (const row of rows) {
     if (row.type === "entry") totalEntries += row.amount;
     else totalExits += row.amount;
-    byCategory[row.category] = (byCategory[row.category] ?? 0) + row.amount;
   }
+  return { totalEntries, totalExits, transactionCount: rows.length };
+}
+function getReportV2(filters) {
+  const db = getDb();
+  const { from, to } = filters;
+  const rows = db.select().from(transactions).where(drizzleOrm.and(...buildReportConditions(from, to, filters))).all();
+  let totalEntries = 0;
+  let totalExits = 0;
+  const entriesByCategory = {};
+  const byDate = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const category = row.category;
+    const date = row.createdAt.slice(0, 10);
+    const point = byDate.get(date) ?? { entries: 0, exits: 0 };
+    if (row.type === "entry") {
+      totalEntries += row.amount;
+      entriesByCategory[category] = (entriesByCategory[category] ?? 0) + row.amount;
+      point.entries += row.amount;
+    } else {
+      totalExits += row.amount;
+      point.exits += row.amount;
+    }
+    byDate.set(date, point);
+  }
+  const totalEntriesForBreakdown = Object.values(entriesByCategory).reduce(
+    (sum, v) => sum + (v ?? 0),
+    0
+  );
+  const byCategory = Object.entries(entriesByCategory).map(([category, amount]) => ({
+    category,
+    amount: amount ?? 0,
+    percentage: totalEntriesForBreakdown > 0 ? (amount ?? 0) / totalEntriesForBreakdown * 100 : 0
+  })).sort((a, b) => b.amount - a.amount);
+  const timeSeries = Array.from(byDate.entries()).map(([date, point]) => ({ date, ...point })).sort((a, b) => a.date.localeCompare(b.date));
+  const { prevFrom, prevTo } = getPreviousPeriod(from, to);
+  const previous = getPeriodTotals(prevFrom, prevTo, filters);
+  const netBalance = totalEntries - totalExits;
+  const previousNetBalance = previous.totalEntries - previous.totalExits;
+  const totalArrears = getArrearsStudents().reduce((sum, student) => sum + student.balance, 0);
+  const kpis = {
+    totalEntries,
+    totalExits,
+    netBalance,
+    transactionCount: rows.length,
+    totalArrears,
+    totalEntriesChangePct: computeGrowthPct$1(totalEntries, previous.totalEntries),
+    totalExitsChangePct: computeGrowthPct$1(totalExits, previous.totalExits),
+    netBalanceChangePct: computeGrowthPct$1(netBalance, previousNetBalance),
+    transactionCountChangePct: computeGrowthPct$1(rows.length, previous.transactionCount),
+    // Pas d'historique des arriérés disponible pour l'instant — on n'affiche pas
+    // de variation plutôt que de bricoler une fausse donnée (voir plan §1.2.5).
+    totalArrearsChangePct: null
+  };
   return {
     from,
     to,
-    totalEntries,
-    totalExits,
-    netBalance: totalEntries - totalExits,
-    byCategory
+    openingBalance: getBalanceBefore(from),
+    kpis,
+    byCategory,
+    timeSeries
   };
 }
-function getCurrentSchoolYearId() {
+function getTypeReport(filters, type) {
   const db = getDb();
-  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.isCurrent, true)).get();
-  return year?.id ?? null;
-}
-function getCurrentEnrollment(studentId, schoolYearId) {
-  const db = getDb();
-  return db.select({ classId: enrollments.classId, className: classes.name }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.studentId, studentId), drizzleOrm.eq(enrollments.schoolYearId, schoolYearId))).get();
-}
-function computeAccount(studentId, classId, schoolYearId) {
-  const db = getDb();
-  const schedule = db.select({ id: tuitionSchedules.id }).from(tuitionSchedules).where(drizzleOrm.and(drizzleOrm.eq(tuitionSchedules.classId, classId), drizzleOrm.eq(tuitionSchedules.schoolYearId, schoolYearId))).get();
-  if (!schedule) {
-    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
+  const { from, to } = filters;
+  const rows = db.select().from(transactions).where(drizzleOrm.and(drizzleOrm.eq(transactions.type, type), ...buildReportConditions(from, to, filters))).all();
+  let total = 0;
+  const byCategoryMap = {};
+  const byDate = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const category = row.category;
+    const date = row.createdAt.slice(0, 10);
+    total += row.amount;
+    byCategoryMap[category] = (byCategoryMap[category] ?? 0) + row.amount;
+    byDate.set(date, (byDate.get(date) ?? 0) + row.amount);
   }
-  const installmentRows = db.select().from(tuitionInstallments).where(drizzleOrm.eq(tuitionInstallments.scheduleId, schedule.id)).orderBy(tuitionInstallments.sortOrder).all();
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const lines = installmentRows.map((installment) => {
-    const payments = db.select({ amount: transactions.amount }).from(transactions).where(
-      drizzleOrm.and(
-        drizzleOrm.eq(transactions.installmentId, installment.id),
-        drizzleOrm.eq(transactions.studentId, studentId),
-        drizzleOrm.eq(transactions.type, "entry"),
-        drizzleOrm.eq(transactions.status, "validated")
-      )
-    ).all();
-    const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
-    const isLate = installment.dueDate < today && paidAmount < installment.amount;
-    return {
-      installmentId: installment.id,
-      label: installment.label,
-      dueDate: installment.dueDate,
-      expectedAmount: installment.amount,
-      paidAmount,
-      status: isLate ? "en_arriere" : "a_jour"
+  const byCategory = Object.entries(byCategoryMap).map(([category, amount]) => ({
+    category,
+    amount: amount ?? 0,
+    percentage: total > 0 ? (amount ?? 0) / total * 100 : 0
+  })).sort((a, b) => b.amount - a.amount);
+  const timeSeries = Array.from(byDate.entries()).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date));
+  const { prevFrom, prevTo } = getPreviousPeriod(from, to);
+  const previousRows = db.select({ amount: transactions.amount }).from(transactions).where(drizzleOrm.and(drizzleOrm.eq(transactions.type, type), ...buildReportConditions(prevFrom, prevTo, filters))).all();
+  const previousTotal = previousRows.reduce((sum, row) => sum + row.amount, 0);
+  return {
+    type,
+    total,
+    totalChangePct: computeGrowthPct$1(total, previousTotal),
+    transactionCount: rows.length,
+    transactionCountChangePct: computeGrowthPct$1(rows.length, previousRows.length),
+    byCategory,
+    timeSeries
+  };
+}
+function getReportByClass(filters) {
+  const db = getDb();
+  const currentYear = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.isCurrent, true)).get();
+  const studentToClass = /* @__PURE__ */ new Map();
+  if (currentYear) {
+    const enrollmentRows = db.select({ studentId: enrollments.studentId, classId: classes.id, className: classes.name }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).where(drizzleOrm.eq(enrollments.schoolYearId, currentYear.id)).all();
+    for (const row of enrollmentRows)
+      studentToClass.set(row.studentId, { classId: row.classId, className: row.className });
+  }
+  const conditions = [
+    drizzleOrm.eq(transactions.status, "validated"),
+    drizzleOrm.gte(transactions.createdAt, filters.from),
+    drizzleOrm.lte(transactions.createdAt, `${filters.to}T23:59:59.999Z`)
+  ];
+  if (filters.category) conditions.push(drizzleOrm.eq(transactions.category, filters.category));
+  if (filters.userId) conditions.push(drizzleOrm.eq(transactions.userId, filters.userId));
+  const rows = db.select({
+    type: transactions.type,
+    amount: transactions.amount,
+    studentId: transactions.studentId
+  }).from(transactions).where(drizzleOrm.and(...conditions)).all();
+  const UNASSIGNED_KEY = "__unassigned__";
+  const byClass = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const match = row.studentId ? studentToClass.get(row.studentId) : void 0;
+    const key = match?.classId ?? UNASSIGNED_KEY;
+    const entry = byClass.get(key) ?? {
+      classId: key,
+      className: match?.className ?? "Non affecté",
+      totalEntries: 0,
+      totalExits: 0,
+      netBalance: 0,
+      transactionCount: 0
     };
-  });
-  const totalExpected = lines.reduce((sum, l) => sum + l.expectedAmount, 0);
-  const totalPaid = lines.reduce((sum, l) => sum + l.paidAmount, 0);
-  return { studentId, installments: lines, totalExpected, totalPaid, balance: totalExpected - totalPaid };
-}
-function getStudentAccount(studentId) {
-  const schoolYearId = getCurrentSchoolYearId();
-  if (!schoolYearId) {
-    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
+    if (row.type === "entry") entry.totalEntries += row.amount;
+    else entry.totalExits += row.amount;
+    entry.netBalance = entry.totalEntries - entry.totalExits;
+    entry.transactionCount += 1;
+    byClass.set(key, entry);
   }
-  const enrollment = getCurrentEnrollment(studentId, schoolYearId);
-  if (!enrollment) {
-    return { studentId, installments: [], totalExpected: 0, totalPaid: 0, balance: 0 };
-  }
-  return computeAccount(studentId, enrollment.classId, schoolYearId);
+  return Array.from(byClass.values()).sort((a, b) => b.netBalance - a.netBalance);
 }
-function getArrearsStudents() {
+function getReportByCashier(filters) {
   const db = getDb();
-  const schoolYearId = getCurrentSchoolYearId();
-  if (!schoolYearId) return [];
-  const activeEnrollments = db.select({
-    studentId: enrollments.studentId,
-    classId: enrollments.classId,
-    className: classes.name,
-    matricule: students.matricule,
-    lastName: students.lastName,
-    firstName: students.firstName
-  }).from(enrollments).innerJoin(classes, drizzleOrm.eq(classes.id, enrollments.classId)).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true))).all();
-  const result = [];
-  for (const row of activeEnrollments) {
-    const account = computeAccount(row.studentId, row.classId, schoolYearId);
-    const lateInstallmentsCount = account.installments.filter((l) => l.status === "en_arriere").length;
-    if (lateInstallmentsCount > 0) {
-      result.push({
-        ...account,
-        matricule: row.matricule,
-        studentName: `${row.lastName} ${row.firstName}`,
-        className: row.className,
-        lateInstallmentsCount
-      });
-    }
+  const conditions = [
+    drizzleOrm.eq(transactions.status, "validated"),
+    drizzleOrm.gte(transactions.createdAt, filters.from),
+    drizzleOrm.lte(transactions.createdAt, `${filters.to}T23:59:59.999Z`)
+  ];
+  if (filters.category) conditions.push(drizzleOrm.eq(transactions.category, filters.category));
+  if (filters.classId) {
+    const studentIds = getStudentIdsForClass(filters.classId);
+    conditions.push(
+      studentIds.length > 0 ? drizzleOrm.inArray(transactions.studentId, studentIds) : drizzleOrm.eq(transactions.id, "")
+    );
   }
-  return result;
-}
-function getGlobalRecoveryStats() {
-  const db = getDb();
-  const schoolYearId = getCurrentSchoolYearId();
-  if (!schoolYearId) return { totalExpected: 0, totalPaid: 0 };
-  const activeEnrollments = db.select({ studentId: enrollments.studentId, classId: enrollments.classId }).from(enrollments).innerJoin(students, drizzleOrm.eq(students.id, enrollments.studentId)).where(drizzleOrm.and(drizzleOrm.eq(enrollments.schoolYearId, schoolYearId), drizzleOrm.eq(students.isActive, true))).all();
-  let totalExpected = 0;
-  let totalPaid = 0;
-  for (const row of activeEnrollments) {
-    const account = computeAccount(row.studentId, row.classId, schoolYearId);
-    totalExpected += account.totalExpected;
-    totalPaid += account.totalPaid;
+  const rows = db.select({ type: transactions.type, amount: transactions.amount, userId: transactions.userId }).from(transactions).where(drizzleOrm.and(...conditions)).all();
+  const cashierNames = new Map(
+    db.select({ id: users.id, fullName: users.fullName }).from(users).all().map((u) => [u.id, u.fullName])
+  );
+  const byCashier = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const entry = byCashier.get(row.userId) ?? {
+      userId: row.userId,
+      cashierName: cashierNames.get(row.userId) ?? "Utilisateur inconnu",
+      totalEntries: 0,
+      totalExits: 0,
+      netBalance: 0,
+      transactionCount: 0
+    };
+    if (row.type === "entry") entry.totalEntries += row.amount;
+    else entry.totalExits += row.amount;
+    entry.netBalance = entry.totalEntries - entry.totalExits;
+    entry.transactionCount += 1;
+    byCashier.set(row.userId, entry);
   }
-  return { totalExpected, totalPaid };
+  return Array.from(byCashier.values()).sort((a, b) => b.transactionCount - a.transactionCount);
 }
 function requireCurrentUserId$1() {
   const session = getCurrentSession();
@@ -1799,9 +2489,27 @@ function registerCashboxIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.cashbox.listArrears, async () => {
     return getArrearsStudents();
   });
-  electron.ipcMain.handle(IPC_CHANNELS.cashbox.getReport, async (_event, from, to) => {
-    return getReport(from, to);
+  electron.ipcMain.handle(IPC_CHANNELS.cashbox.getReportV2, async (_event, filters) => {
+    return getReportV2(filters);
   });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.cashbox.getTypeReport,
+    async (_event, filters, type) => {
+      return getTypeReport(filters, type);
+    }
+  );
+  electron.ipcMain.handle(
+    IPC_CHANNELS.cashbox.getReportByClass,
+    async (_event, filters) => {
+      return getReportByClass(filters);
+    }
+  );
+  electron.ipcMain.handle(
+    IPC_CHANNELS.cashbox.getReportByCashier,
+    async (_event, filters) => {
+      return getReportByCashier(filters);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.cashbox.getReceipt, async (_event, transactionId) => {
     return getReceiptByTransaction(transactionId);
   });
@@ -1836,6 +2544,18 @@ function toSalaryPayment(row) {
     year: row.year,
     transactionId: row.transactionId,
     paidAt: row.paidAt
+  };
+}
+function toSalaryAdvance(row) {
+  return {
+    id: row.id,
+    employeeId: row.employeeId,
+    amount: row.amount,
+    reason: row.reason,
+    transactionId: row.transactionId,
+    status: row.status,
+    deductedInPaymentId: row.deductedInPaymentId,
+    createdAt: row.createdAt
   };
 }
 function requireCurrentSchoolYearId() {
@@ -1936,20 +2656,31 @@ function paySalary(employeeId, month, year, userId) {
       `Le salaire de ${employee.firstName} ${employee.lastName} pour cette période a déjà été marqué payé (BR-009).`
     );
   }
+  const pendingAdvance = db.select().from(salaryAdvances).where(drizzleOrm.and(drizzleOrm.eq(salaryAdvances.employeeId, employeeId), drizzleOrm.eq(salaryAdvances.status, "pending"))).get();
+  const grossAmount = employee.monthlySalary;
+  const advanceAmount = pendingAdvance?.amount ?? 0;
+  if (advanceAmount > grossAmount) {
+    throw new Error(
+      `L'avance en attente (${advanceAmount} FCFA) dépasse le salaire mensuel de ${employee.firstName} ${employee.lastName} (${grossAmount} FCFA). Contactez un administrateur pour régulariser la situation avant de payer ce salaire.`
+    );
+  }
+  const netAmount = grossAmount - advanceAmount;
   const schoolYearId = requireCurrentSchoolYearId();
   const transactionId = generateId();
   const paymentId = generateId();
   const monthLabel = String(month).padStart(2, "0");
+  const advanceNote = pendingAdvance ? ` (net après déduction avance de ${advanceAmount} FCFA)` : "";
   db.transaction((tx) => {
     tx.insert(transactions).values({
       id: transactionId,
       type: "exit",
       category: "salaire",
-      description: `Salaire ${monthLabel}/${year} — ${employee.firstName} ${employee.lastName} (${employee.role})`,
-      amount: employee.monthlySalary,
+      description: `Salaire ${monthLabel}/${year} — ${employee.firstName} ${employee.lastName} (${employee.role})${advanceNote}`,
+      amount: netAmount,
       employeeId,
       status: "validated",
-      userId
+      userId,
+      schoolYearId
     }).run();
     tx.insert(salaryPayments).values({
       id: paymentId,
@@ -1959,23 +2690,44 @@ function paySalary(employeeId, month, year, userId) {
       year,
       transactionId
     }).run();
+    if (pendingAdvance) {
+      tx.update(salaryAdvances).set({ status: "deducted", deductedInPaymentId: paymentId }).where(drizzleOrm.eq(salaryAdvances.id, pendingAdvance.id)).run();
+    }
   });
   logAction({
     userId,
     action: "paySalary",
     entityType: "employee",
     entityId: employeeId,
-    details: { month, year, transactionId, amount: employee.monthlySalary }
+    details: {
+      month,
+      year,
+      transactionId,
+      grossAmount,
+      netAmount,
+      deductedAdvanceId: pendingAdvance?.id ?? null
+    }
   });
   const row = db.select().from(salaryPayments).where(drizzleOrm.eq(salaryPayments.id, paymentId)).get();
   if (!row) throw new Error("Échec de la récupération du paiement après création.");
-  return toSalaryPayment(row);
+  return {
+    ...toSalaryPayment(row),
+    grossAmount,
+    netAmount,
+    deductedAdvance: pendingAdvance ? toSalaryAdvance({
+      ...pendingAdvance,
+      status: "deducted",
+      deductedInPaymentId: paymentId
+    }) : null
+  };
 }
 function getSalaryStatus(month, year) {
   const db = getDb();
   const activeEmployees = db.select().from(employees).where(drizzleOrm.eq(employees.isActive, true)).orderBy(employees.lastName, employees.firstName).all();
   const payments = db.select().from(salaryPayments).where(drizzleOrm.and(drizzleOrm.eq(salaryPayments.month, month), drizzleOrm.eq(salaryPayments.year, year))).all();
   const paymentByEmployeeId = new Map(payments.map((p) => [p.employeeId, p]));
+  const pendingAdvances = db.select().from(salaryAdvances).where(drizzleOrm.eq(salaryAdvances.status, "pending")).all();
+  const pendingAdvanceByEmployeeId = new Map(pendingAdvances.map((a) => [a.employeeId, a]));
   return activeEmployees.map((emp) => {
     const payment = paymentByEmployeeId.get(emp.id);
     return {
@@ -1984,7 +2736,8 @@ function getSalaryStatus(month, year) {
       year,
       isPaid: Boolean(payment),
       paymentId: payment?.id,
-      paidAt: payment?.paidAt
+      paidAt: payment?.paidAt,
+      pendingAdvanceAmount: pendingAdvanceByEmployeeId.get(emp.id)?.amount
     };
   });
 }
@@ -1999,6 +2752,97 @@ function getSalaryHistory(employeeId) {
     amount: transactions.amount
   }).from(salaryPayments).innerJoin(transactions, drizzleOrm.eq(salaryPayments.transactionId, transactions.id)).where(drizzleOrm.eq(salaryPayments.employeeId, employeeId)).all();
   return rows.sort((a, b) => b.year - a.year || b.month - a.month);
+}
+function grantAdvance(data) {
+  if (!Number.isInteger(data.amount) || data.amount <= 0) {
+    throw new Error("Le montant de l'avance doit être un nombre entier positif.");
+  }
+  const db = getDb();
+  const employee = db.select().from(employees).where(drizzleOrm.eq(employees.id, data.employeeId)).get();
+  if (!employee) throw new Error("Employé introuvable.");
+  if (!employee.isActive) {
+    throw new Error("Impossible d’accorder une avance à un employé désactivé.");
+  }
+  const existingPending = db.select().from(salaryAdvances).where(
+    drizzleOrm.and(drizzleOrm.eq(salaryAdvances.employeeId, data.employeeId), drizzleOrm.eq(salaryAdvances.status, "pending"))
+  ).get();
+  if (existingPending) {
+    throw new Error(
+      `${employee.firstName} ${employee.lastName} a déjà une avance de ${existingPending.amount} FCFA en attente de remboursement. Elle sera déduite automatiquement de son prochain salaire ; une nouvelle avance ne peut pas être accordée avant.`
+    );
+  }
+  if (data.amount > employee.monthlySalary) {
+    throw new Error(
+      `L'avance (${data.amount} FCFA) ne peut pas dépasser le salaire mensuel de l'employé (${employee.monthlySalary} FCFA).`
+    );
+  }
+  const transactionId = generateId();
+  const advanceId = generateId();
+  const reason = data.reason?.trim() || null;
+  const schoolYearId = requireCurrentSchoolYearId();
+  db.transaction((tx) => {
+    tx.insert(transactions).values({
+      id: transactionId,
+      type: "exit",
+      category: "avance_salaire",
+      description: `Avance sur salaire — ${employee.firstName} ${employee.lastName} (${employee.role})${reason ? ` — ${reason}` : ""}`,
+      amount: data.amount,
+      employeeId: data.employeeId,
+      status: "validated",
+      userId: data.userId,
+      schoolYearId
+    }).run();
+    tx.insert(salaryAdvances).values({
+      id: advanceId,
+      employeeId: data.employeeId,
+      amount: data.amount,
+      reason,
+      transactionId,
+      status: "pending",
+      userId: data.userId
+    }).run();
+  });
+  logAction({
+    userId: data.userId,
+    action: "grantAdvance",
+    entityType: "employee",
+    entityId: data.employeeId,
+    details: { amount: data.amount, reason, transactionId }
+  });
+  const row = db.select().from(salaryAdvances).where(drizzleOrm.eq(salaryAdvances.id, advanceId)).get();
+  if (!row) throw new Error("Échec de la récupération de l'avance après création.");
+  return toSalaryAdvance(row);
+}
+function cancelAdvance(id, userId) {
+  const db = getDb();
+  const advance = db.select().from(salaryAdvances).where(drizzleOrm.eq(salaryAdvances.id, id)).get();
+  if (!advance) throw new Error("Avance introuvable.");
+  if (advance.status !== "pending") {
+    throw new Error("Seule une avance en attente de remboursement peut être annulée.");
+  }
+  db.transaction((tx) => {
+    tx.update(salaryAdvances).set({ status: "cancelled" }).where(drizzleOrm.eq(salaryAdvances.id, id)).run();
+    tx.update(transactions).set({
+      status: "cancelled",
+      cancelReason: "Annulation de l'avance sur salaire associée"
+    }).where(drizzleOrm.eq(transactions.id, advance.transactionId)).run();
+  });
+  logAction({
+    userId,
+    action: "cancelAdvance",
+    entityType: "employee",
+    entityId: advance.employeeId
+  });
+}
+function listAdvances(employeeId) {
+  const db = getDb();
+  const rows = db.select().from(salaryAdvances).where(drizzleOrm.eq(salaryAdvances.employeeId, employeeId)).all();
+  return rows.map(toSalaryAdvance).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+function getPendingAdvance(employeeId) {
+  const db = getDb();
+  const row = db.select().from(salaryAdvances).where(drizzleOrm.and(drizzleOrm.eq(salaryAdvances.employeeId, employeeId), drizzleOrm.eq(salaryAdvances.status, "pending"))).get();
+  return row ? toSalaryAdvance(row) : null;
 }
 function requireCurrentUserId() {
   const session = getCurrentSession();
@@ -2039,6 +2883,46 @@ function registerPersonnelIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.personnel.getSalaryHistory, async (_event, employeeId) => {
     return getSalaryHistory(employeeId);
   });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.personnel.grantAdvance,
+    async (_event, data) => {
+      return grantAdvance({ ...data, userId: requireCurrentUserId() });
+    }
+  );
+  electron.ipcMain.handle(IPC_CHANNELS.personnel.cancelAdvance, async (_event, id) => {
+    cancelAdvance(id, requireCurrentUserId());
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.personnel.listAdvances, async (_event, employeeId) => {
+    return listAdvances(employeeId);
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.personnel.getPendingAdvance, async (_event, employeeId) => {
+    return getPendingAdvance(employeeId);
+  });
+}
+const SCHOOL_YEAR_LABEL_PATTERN = /^(\d{4})-(\d{4})$/;
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2200;
+function validateSchoolYearLabel(rawLabel) {
+  const label = rawLabel.trim();
+  if (!label) {
+    return { valid: false, error: "Le libellé de l'année scolaire est requis." };
+  }
+  const match = SCHOOL_YEAR_LABEL_PATTERN.exec(label);
+  if (!match) {
+    return { valid: false, error: "Le libellé doit suivre le format AAAA-AAAA, ex: 2027-2028." };
+  }
+  const startYear = Number(match[1]);
+  const endYear = Number(match[2]);
+  if (endYear !== startYear + 1) {
+    return {
+      valid: false,
+      error: `La seconde année doit suivre la première (ex: ${startYear}-${startYear + 1}).`
+    };
+  }
+  if (startYear < MIN_YEAR || startYear > MAX_YEAR) {
+    return { valid: false, error: `L'année doit être comprise entre ${MIN_YEAR} et ${MAX_YEAR}.` };
+  }
+  return { valid: true };
 }
 function getCurrentSchoolYear$1() {
   const db = getDb();
@@ -2051,8 +2935,9 @@ function listSchoolYears() {
 function createSchoolYear(label) {
   const db = getDb();
   const trimmed = label.trim();
-  if (!trimmed) {
-    throw new Error("Le libellé de l'année scolaire est requis.");
+  const validation = validateSchoolYearLabel(trimmed);
+  if (!validation.valid) {
+    throw new Error(validation.error);
   }
   const existing = db.select({ id: schoolYears.id }).from(schoolYears).where(drizzleOrm.eq(schoolYears.label, trimmed)).get();
   if (existing) {
@@ -2078,49 +2963,141 @@ function getClasses() {
   const db = getDb();
   return db.select().from(classes).orderBy(classes.sortOrder).all();
 }
+function createClass(name) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Le nom de la classe est requis.");
+  }
+  const db = getDb();
+  const existing = getClasses();
+  if (existing.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error(`La classe « ${trimmed} » existe déjà.`);
+  }
+  const nextSortOrder = existing.length > 0 ? Math.max(...existing.map((c) => c.sortOrder)) + 1 : 0;
+  const id = generateId();
+  db.insert(classes).values({ id, name: trimmed, sortOrder: nextSortOrder }).run();
+  return { id, name: trimmed, sortOrder: nextSortOrder };
+}
+function updateClass(id, name) {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Le nom de la classe est requis.");
+  }
+  const db = getDb();
+  const existing = getClasses();
+  if (existing.some((c) => c.id !== id && c.name.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error(`La classe « ${trimmed} » existe déjà.`);
+  }
+  db.update(classes).set({ name: trimmed }).where(drizzleOrm.eq(classes.id, id)).run();
+  const updated = existing.find((c) => c.id === id);
+  if (!updated) throw new Error("Classe introuvable.");
+  return { ...updated, name: trimmed };
+}
+function deleteClass(id) {
+  const db = getDb();
+  const hasEnrollments = db.select({ id: enrollments.id }).from(enrollments).where(drizzleOrm.eq(enrollments.classId, id)).get();
+  if (hasEnrollments) {
+    throw new Error(
+      "Impossible de supprimer cette classe : des élèves y sont ou y ont été inscrits."
+    );
+  }
+  db.delete(tuitionSchedules).where(drizzleOrm.eq(tuitionSchedules.classId, id)).run();
+  db.delete(classes).where(drizzleOrm.eq(classes.id, id)).run();
+}
 function getTuitionSchedule(classId, schoolYearId) {
   const db = getDb();
-  const schedule = db.select().from(tuitionSchedules).where(drizzleOrm.and(drizzleOrm.eq(tuitionSchedules.classId, classId), drizzleOrm.eq(tuitionSchedules.schoolYearId, schoolYearId))).get();
+  const schedule = db.select().from(tuitionSchedules).where(
+    drizzleOrm.and(drizzleOrm.eq(tuitionSchedules.classId, classId), drizzleOrm.eq(tuitionSchedules.schoolYearId, schoolYearId))
+  ).get();
   if (!schedule) return null;
   const installments = db.select().from(tuitionInstallments).where(drizzleOrm.eq(tuitionInstallments.scheduleId, schedule.id)).orderBy(tuitionInstallments.sortOrder).all();
-  return { ...schedule, installments };
+  const paidInstallmentIds = installmentIdsWithValidatedPayments(installments.map((i) => i.id));
+  return {
+    ...schedule,
+    installments: installments.map((i) => ({ ...i, hasPayments: paidInstallmentIds.has(i.id) }))
+  };
+}
+function installmentIdsWithValidatedPayments(installmentIds) {
+  if (installmentIds.length === 0) return /* @__PURE__ */ new Set();
+  const db = getDb();
+  const rows = db.select({ installmentId: transactions.installmentId }).from(transactions).where(
+    drizzleOrm.and(
+      drizzleOrm.inArray(transactions.installmentId, installmentIds),
+      drizzleOrm.eq(transactions.type, "entry"),
+      drizzleOrm.eq(transactions.status, "validated")
+    )
+  ).all();
+  return new Set(rows.map((r) => r.installmentId).filter((id) => id !== null));
 }
 function saveTuitionSchedule(data) {
   const db = getDb();
   if (data.installments.length === 0) {
     throw new Error("Au moins une tranche est requise.");
   }
+  const VALID_TARGETS = /* @__PURE__ */ new Set(["tous", "nouveau", "ancien"]);
   for (const installment of data.installments) {
     if (!installment.label.trim()) throw new Error("Chaque tranche doit avoir un libellé.");
     if (installment.amount <= 0) throw new Error("Le montant de chaque tranche doit être positif.");
     if (!installment.dueDate) throw new Error("Chaque tranche doit avoir une date d'échéance.");
+    if (!VALID_TARGETS.has(installment.appliesTo)) {
+      throw new Error(`« Concerné » invalide pour la tranche "${installment.label}".`);
+    }
   }
-  const scheduleId = db.transaction((tx) => {
+  db.transaction((tx) => {
     let schedule = tx.select({ id: tuitionSchedules.id }).from(tuitionSchedules).where(
-      drizzleOrm.and(drizzleOrm.eq(tuitionSchedules.classId, data.classId), drizzleOrm.eq(tuitionSchedules.schoolYearId, data.schoolYearId))
+      drizzleOrm.and(
+        drizzleOrm.eq(tuitionSchedules.classId, data.classId),
+        drizzleOrm.eq(tuitionSchedules.schoolYearId, data.schoolYearId)
+      )
     ).get();
     if (!schedule) {
       const id = generateId();
       tx.insert(tuitionSchedules).values({ id, classId: data.classId, schoolYearId: data.schoolYearId }).run();
       schedule = { id };
-    } else {
-      tx.delete(tuitionInstallments).where(drizzleOrm.eq(tuitionInstallments.scheduleId, schedule.id)).run();
     }
-    tx.insert(tuitionInstallments).values(
-      data.installments.map((installment, index) => ({
-        id: generateId(),
-        scheduleId: schedule.id,
-        label: installment.label.trim(),
-        amount: installment.amount,
-        dueDate: installment.dueDate,
-        sortOrder: installment.sortOrder ?? index
-      }))
-    ).run();
+    const existingInstallments = tx.select({ id: tuitionInstallments.id }).from(tuitionInstallments).where(drizzleOrm.eq(tuitionInstallments.scheduleId, schedule.id)).all();
+    const existingIds = new Set(existingInstallments.map((i) => i.id));
+    const incomingIds = new Set(
+      data.installments.filter((i) => i.id && existingIds.has(i.id)).map((i) => i.id)
+    );
+    const idsToDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+    if (idsToDelete.length > 0) {
+      const paidIds = installmentIdsWithValidatedPayments(idsToDelete);
+      if (paidIds.size > 0) {
+        const paidLabels = tx.select({ label: tuitionInstallments.label }).from(tuitionInstallments).where(drizzleOrm.inArray(tuitionInstallments.id, [...paidIds])).all().map((r) => r.label);
+        throw new Error(
+          `Impossible de supprimer la/les tranche(s) "${paidLabels.join(", ")}" : des paiements y sont déjà enregistrés.`
+        );
+      }
+      tx.delete(tuitionInstallments).where(drizzleOrm.inArray(tuitionInstallments.id, idsToDelete)).run();
+    }
+    data.installments.forEach((installment, index) => {
+      const sortOrder = installment.sortOrder ?? index;
+      if (installment.id && existingIds.has(installment.id)) {
+        tx.update(tuitionInstallments).set({
+          label: installment.label.trim(),
+          amount: installment.amount,
+          dueDate: installment.dueDate,
+          sortOrder,
+          appliesTo: installment.appliesTo
+        }).where(drizzleOrm.eq(tuitionInstallments.id, installment.id)).run();
+      } else {
+        tx.insert(tuitionInstallments).values({
+          id: generateId(),
+          scheduleId: schedule.id,
+          label: installment.label.trim(),
+          amount: installment.amount,
+          dueDate: installment.dueDate,
+          sortOrder,
+          appliesTo: installment.appliesTo
+        }).run();
+      }
+    });
     return schedule.id;
   });
   const result = getTuitionSchedule(data.classId, data.schoolYearId);
   if (!result) {
-    throw new Error(`Barème introuvable après sauvegarde (id: ${scheduleId}).`);
+    throw new Error("Barème introuvable après sauvegarde.");
   }
   return result;
 }
@@ -2172,6 +3149,15 @@ function registerSettingsIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.settings.getClasses, async () => {
     return getClasses();
   });
+  electron.ipcMain.handle(IPC_CHANNELS.settings.createClass, async (_event, name) => {
+    return createClass(name);
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.settings.updateClass, async (_event, id, name) => {
+    return updateClass(id, name);
+  });
+  electron.ipcMain.handle(IPC_CHANNELS.settings.deleteClass, async (_event, id) => {
+    return deleteClass(id);
+  });
   electron.ipcMain.handle(
     IPC_CHANNELS.settings.getTuitionSchedule,
     async (_event, classId, yearId) => {
@@ -2187,9 +3173,12 @@ function registerSettingsIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.settings.getSchoolInfo, async () => {
     return getSchoolInfo();
   });
-  electron.ipcMain.handle(IPC_CHANNELS.settings.updateSchoolInfo, async (_event, data) => {
-    return updateSchoolInfo(data);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.settings.updateSchoolInfo,
+    async (_event, data) => {
+      return updateSchoolInfo(data);
+    }
+  );
 }
 function registerAuthIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.auth.login, async (_event, username, password) => {
@@ -2220,12 +3209,18 @@ function registerAuthIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.auth.createUser, async (_event, data) => {
     return createUser(data);
   });
-  electron.ipcMain.handle(IPC_CHANNELS.auth.updateUser, async (_event, userId, data) => {
-    return updateUser(userId, data);
-  });
-  electron.ipcMain.handle(IPC_CHANNELS.auth.setUserActive, async (_event, userId, isActive) => {
-    return setUserActive(userId, isActive);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.auth.updateUser,
+    async (_event, userId, data) => {
+      return updateUser(userId, data);
+    }
+  );
+  electron.ipcMain.handle(
+    IPC_CHANNELS.auth.setUserActive,
+    async (_event, userId, isActive) => {
+      return setUserActive(userId, isActive);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.auth.resetPassword, async (_event, userId) => {
     return resetPassword(userId);
   });
@@ -2273,7 +3268,11 @@ function updatePrinterConfig(data) {
 function recordTestResult(success, message) {
   const db = getDb();
   getPrinterConfig();
-  db.update(printerConfig).set({ lastTestAt: (/* @__PURE__ */ new Date()).toISOString(), lastTestSuccess: success, lastTestMessage: message }).where(drizzleOrm.eq(printerConfig.id, PRINTER_CONFIG_ID)).run();
+  db.update(printerConfig).set({
+    lastTestAt: (/* @__PURE__ */ new Date()).toISOString(),
+    lastTestSuccess: success,
+    lastTestMessage: message
+  }).where(drizzleOrm.eq(printerConfig.id, PRINTER_CONFIG_ID)).run();
   return getPrinterConfig();
 }
 function formatAmount(amount) {
@@ -2416,12 +3415,30 @@ function registerPrinterIpcHandlers() {
       throw new Error(`Échec de l'ouverture du PDF : ${error}`);
     }
   });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.printer.openFile,
+    async (_event, base64, fileName) => {
+      const buffer = Buffer.from(base64, "base64");
+      const dir = node_path.join(electron.app.getPath("temp"), "academyflow-exports");
+      node_fs.mkdirSync(dir, { recursive: true });
+      const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = node_path.join(dir, safeFileName);
+      node_fs.writeFileSync(filePath, buffer);
+      const error = await electron.shell.openPath(filePath);
+      if (error) {
+        throw new Error(`Échec de l'ouverture du fichier : ${error}`);
+      }
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.printer.getConfig, async () => {
     return getPrinterConfig();
   });
-  electron.ipcMain.handle(IPC_CHANNELS.printer.updateConfig, async (_event, data) => {
-    return updatePrinterConfig(data);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.printer.updateConfig,
+    async (_event, data) => {
+      return updatePrinterConfig(data);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.printer.getStatus, async () => {
     const config = getPrinterConfig();
     return {
@@ -2445,45 +3462,51 @@ function registerPrinterIpcHandlers() {
       return { connected: false };
     }
   });
-  electron.ipcMain.handle(IPC_CHANNELS.printer.printReceipt, async (_event, receiptId) => {
-    const config = getPrinterConfig();
-    if (!config.enabled) {
-      return { success: false, message: "Impression thermique désactivée — utilisation du reçu PDF." };
+  electron.ipcMain.handle(
+    IPC_CHANNELS.printer.printReceipt,
+    async (_event, receiptId) => {
+      const config = getPrinterConfig();
+      if (!config.enabled) {
+        return {
+          success: false,
+          message: "Impression thermique désactivée — utilisation du reçu PDF."
+        };
+      }
+      try {
+        const receipt = getReceiptById(receiptId);
+        if (!receipt) throw new Error("Reçu introuvable.");
+        const transaction = getTransactionById(receipt.transactionId);
+        if (!transaction) throw new Error("Opération introuvable pour ce reçu.");
+        const student = transaction.studentId ? findById(transaction.studentId) : null;
+        const className = transaction.studentId ? getCurrentClassName(transaction.studentId) : null;
+        const installmentLabel = transaction.installmentId ? getInstallmentLabel(transaction.installmentId) : null;
+        const operator = getUserById(transaction.userId);
+        const schoolInfo2 = getSchoolInfo();
+        await printReceiptTicket(
+          config,
+          {
+            receiptNumber: receipt.receiptNumber,
+            createdAt: receipt.createdAt,
+            studentName: student ? `${student.lastName} ${student.firstName}` : null,
+            matricule: student?.matricule ?? null,
+            className,
+            categoryLabel: CASH_CATEGORY_LABELS[transaction.category],
+            installmentLabel,
+            description: transaction.description,
+            amount: transaction.amount,
+            operatorName: operator?.fullName ?? "—",
+            printCopyLabel: receipt.printCount > 0 ? `Copie n° ${receipt.printCount + 1}` : null
+          },
+          schoolInfo2
+        );
+        incrementPrintCount(transaction.id);
+        return { success: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Échec de l'impression thermique.";
+        return { success: false, message };
+      }
     }
-    try {
-      const receipt = getReceiptById(receiptId);
-      if (!receipt) throw new Error("Reçu introuvable.");
-      const transaction = getTransactionById(receipt.transactionId);
-      if (!transaction) throw new Error("Opération introuvable pour ce reçu.");
-      const student = transaction.studentId ? findById(transaction.studentId) : null;
-      const className = transaction.studentId ? getCurrentClassName(transaction.studentId) : null;
-      const installmentLabel = transaction.installmentId ? getInstallmentLabel(transaction.installmentId) : null;
-      const operator = getUserById(transaction.userId);
-      const schoolInfo2 = getSchoolInfo();
-      await printReceiptTicket(
-        config,
-        {
-          receiptNumber: receipt.receiptNumber,
-          createdAt: receipt.createdAt,
-          studentName: student ? `${student.lastName} ${student.firstName}` : null,
-          matricule: student?.matricule ?? null,
-          className,
-          categoryLabel: CASH_CATEGORY_LABELS[transaction.category],
-          installmentLabel,
-          description: transaction.description,
-          amount: transaction.amount,
-          operatorName: operator?.fullName ?? "—",
-          printCopyLabel: receipt.printCount > 0 ? `Copie n° ${receipt.printCount + 1}` : null
-        },
-        schoolInfo2
-      );
-      incrementPrintCount(transaction.id);
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Échec de l'impression thermique.";
-      return { success: false, message };
-    }
-  });
+  );
 }
 const BACKUP_CONFIG_ID = "singleton";
 function ensureRow() {
@@ -2560,7 +3583,10 @@ function recordBackupResult(status, message) {
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   }).where(drizzleOrm.eq(backupConfig.id, BACKUP_CONFIG_ID)).run();
 }
-const SCOPES = ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/userinfo.email"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/userinfo.email"
+];
 const LOOPBACK_TIMEOUT_MS = 5 * 60 * 1e3;
 function getOAuthCredentials() {
   const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
@@ -2611,7 +3637,11 @@ async function runLoopbackAuthorization() {
         const email = await resolveAccountEmail(client);
         settle(() => resolve({ refreshToken: tokens.refresh_token, accountEmail: email }));
       } catch (error) {
-        settle(() => reject(error instanceof Error ? error : new Error("Échec de l'échange du code d'autorisation.")));
+        settle(
+          () => reject(
+            error instanceof Error ? error : new Error("Échec de l'échange du code d'autorisation.")
+          )
+        );
       }
     }
     const server = node_http.createServer((req, res) => {
@@ -2624,7 +3654,12 @@ async function runLoopbackAuthorization() {
       const errorParam = url.searchParams.get("error");
       if (errorParam) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(buildResponsePage("Connexion annulée", "Vous pouvez fermer cette fenêtre et revenir à AcademyFlow."));
+        res.end(
+          buildResponsePage(
+            "Connexion annulée",
+            "Vous pouvez fermer cette fenêtre et revenir à AcademyFlow."
+          )
+        );
         cleanup();
         settle(() => reject(new Error("Autorisation refusée par l'utilisateur.")));
         return;
@@ -2634,7 +3669,12 @@ async function runLoopbackAuthorization() {
         return;
       }
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(buildResponsePage("Connexion réussie", "Vous pouvez fermer cette fenêtre et revenir à AcademyFlow."));
+      res.end(
+        buildResponsePage(
+          "Connexion réussie",
+          "Vous pouvez fermer cette fenêtre et revenir à AcademyFlow."
+        )
+      );
       cleanup();
       void exchangeCode(code);
     });
@@ -2655,7 +3695,11 @@ async function runLoopbackAuthorization() {
       });
       electron.shell.openExternal(authUrl).catch((error) => {
         cleanup();
-        settle(() => reject(error instanceof Error ? error : new Error("Impossible d'ouvrir le navigateur système.")));
+        settle(
+          () => reject(
+            error instanceof Error ? error : new Error("Impossible d'ouvrir le navigateur système.")
+          )
+        );
       });
     });
   });
@@ -2673,7 +3717,9 @@ function encryptRefreshToken(token) {
   if (electron.safeStorage.isEncryptionAvailable()) {
     return `enc:${electron.safeStorage.encryptString(token).toString("base64")}`;
   }
-  console.warn("[backup] Chiffrement système indisponible — jeton Google Drive stocké sans chiffrement.");
+  console.warn(
+    "[backup] Chiffrement système indisponible — jeton Google Drive stocké sans chiffrement."
+  );
   return `plain:${token}`;
 }
 function decryptRefreshToken(stored) {
@@ -2709,6 +3755,17 @@ async function ensureBackupFolder(drive) {
     } catch {
     }
   }
+  const found = await drive.files.list({
+    q: `name = '${BACKUP_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: "files(id, createdTime)",
+    orderBy: "createdTime",
+    pageSize: 1
+  });
+  const existingFolderId = found.data.files?.[0]?.id;
+  if (existingFolderId) {
+    setDriveFolderId(existingFolderId);
+    return existingFolderId;
+  }
   const created = await drive.files.create({
     requestBody: { name: BACKUP_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" },
     fields: "id"
@@ -2719,6 +3776,20 @@ async function ensureBackupFolder(drive) {
   }
   setDriveFolderId(folderId);
   return folderId;
+}
+async function listBackupFiles(drive, folderId) {
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: "files(id, name, size, createdTime)",
+    orderBy: "createdTime desc",
+    pageSize: 50
+  });
+  return (res.data.files ?? []).filter((f) => f.id && f.name).map((f) => ({
+    driveFileId: f.id,
+    fileName: f.name,
+    sizeBytes: f.size ? Number(f.size) : 0,
+    createdAt: f.createdTime ?? (/* @__PURE__ */ new Date()).toISOString()
+  }));
 }
 async function uploadBackupFile(drive, folderId, fileName, content) {
   const res = await drive.files.create({
@@ -2743,8 +3814,13 @@ async function deleteBackupFile(drive, driveFileId) {
 }
 const MAX_BACKUPS_RETAINED = 7;
 const SCHEDULER_CHECK_INTERVAL_MS = 15 * 60 * 1e3;
-function toHistoryEntry(row) {
-  return { id: row.id, fileName: row.fileName, sizeBytes: row.sizeBytes, createdAt: row.createdAt };
+function toHistoryEntry(file) {
+  return {
+    id: file.driveFileId,
+    fileName: file.fileName,
+    sizeBytes: file.sizeBytes,
+    createdAt: file.createdAt
+  };
 }
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} o`;
@@ -2757,12 +3833,14 @@ function getBackupStatus() {
 function updateBackupSettings(data) {
   return updateBackupSettings$1(data);
 }
-function listBackups() {
-  const db = getDb();
-  return db.select().from(backupHistory).orderBy(drizzleOrm.desc(backupHistory.createdAt)).all().map(toHistoryEntry);
+async function listBackups() {
+  const drive = getDriveClient();
+  const folderId = await ensureBackupFolder(drive);
+  const files = await listBackupFiles(drive, folderId);
+  return files.map(toHistoryEntry);
 }
-function getLastBackup() {
-  const [latest] = listBackups();
+async function getLastBackup() {
+  const [latest] = await listBackups();
   return latest ? { fileName: latest.fileName, createdAt: latest.createdAt, sizeBytes: latest.sizeBytes } : null;
 }
 async function connectGoogleAccount() {
@@ -2774,19 +3852,19 @@ function disconnectGoogleAccount() {
   disconnectAccount();
   return getBackupStatus$1();
 }
-async function rotateOldBackups() {
-  const db = getDb();
-  const rows = db.select().from(backupHistory).orderBy(drizzleOrm.desc(backupHistory.createdAt)).all();
-  const toDelete = rows.slice(MAX_BACKUPS_RETAINED);
+async function rotateOldBackups(drive, folderId) {
+  const files = await listBackupFiles(drive, folderId);
+  const toDelete = files.slice(MAX_BACKUPS_RETAINED);
   if (toDelete.length === 0) return;
-  const drive = getDriveClient();
-  for (const row of toDelete) {
+  for (const file of toDelete) {
     try {
-      await deleteBackupFile(drive, row.driveFileId);
+      await deleteBackupFile(drive, file.driveFileId);
     } catch (error) {
-      console.warn(`[backup] Échec de la suppression distante de ${row.fileName} (ignoré) :`, error);
+      console.warn(
+        `[backup] Échec de la suppression distante de ${file.fileName} (ignoré) :`,
+        error
+      );
     }
-    db.delete(backupHistory).where(drizzleOrm.eq(backupHistory.id, row.id)).run();
   }
 }
 async function exportToCloud() {
@@ -2796,10 +3874,8 @@ async function exportToCloud() {
     getSqlite().pragma("wal_checkpoint(TRUNCATE)");
     const dbBuffer = node_zlib.gzipSync(node_fs.readFileSync(getDatabasePath()));
     const fileName = `academyflow_${dateFns.format(/* @__PURE__ */ new Date(), "yyyy-MM-dd_HHmmss")}.db.gz`;
-    const { driveFileId } = await uploadBackupFile(drive, folderId, fileName, dbBuffer);
-    const db = getDb();
-    db.insert(backupHistory).values({ driveFileId, fileName, sizeBytes: dbBuffer.length }).run();
-    await rotateOldBackups();
+    await uploadBackupFile(drive, folderId, fileName, dbBuffer);
+    await rotateOldBackups(drive, folderId);
     const message = `Sauvegarde envoyée (${formatBytes(dbBuffer.length)}).`;
     recordBackupResult("success", message);
     return { success: true, fileName };
@@ -2811,13 +3887,17 @@ async function exportToCloud() {
 }
 async function restoreFromCloud(backupId) {
   try {
-    const db = getDb();
-    const target = db.select().from(backupHistory).where(drizzleOrm.eq(backupHistory.id, backupId)).get();
-    if (!target) {
-      throw new Error("Sauvegarde introuvable.");
-    }
     const drive = getDriveClient();
-    const gzipped = await downloadBackupFile(drive, target.driveFileId);
+    let gzipped;
+    try {
+      gzipped = await downloadBackupFile(drive, backupId);
+    } catch (error) {
+      const status = error?.code ?? error?.status;
+      if (status === 404) {
+        throw new Error("Cette sauvegarde n'existe plus sur Google Drive.");
+      }
+      throw error;
+    }
     const restoredDb = node_zlib.gunzipSync(gzipped);
     const dbPath = getDatabasePath();
     const localBackupsDir = node_path.join(node_path.dirname(dbPath), "backups");
@@ -2834,7 +3914,7 @@ async function restoreFromCloud(backupId) {
       electron.app.relaunch();
       electron.app.exit(0);
     }, 800);
-    return { success: true, fileName: target.fileName };
+    return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Échec de la restauration.";
     return { success: false, message };
@@ -2856,7 +3936,9 @@ async function runAutoBackupIfDue() {
 function initAutoBackupScheduler() {
   if (schedulerHandle) return;
   schedulerHandle = setInterval(() => {
-    runAutoBackupIfDue().catch((error) => console.error("[backup] Échec de la sauvegarde automatique :", error));
+    runAutoBackupIfDue().catch(
+      (error) => console.error("[backup] Échec de la sauvegarde automatique :", error)
+    );
   }, SCHEDULER_CHECK_INTERVAL_MS);
 }
 function stopAutoBackupScheduler() {
@@ -2869,9 +3951,12 @@ function registerBackupIpcHandlers() {
   electron.ipcMain.handle(IPC_CHANNELS.backup.getStatus, async () => {
     return getBackupStatus();
   });
-  electron.ipcMain.handle(IPC_CHANNELS.backup.updateSettings, async (_event, data) => {
-    return updateBackupSettings(data);
-  });
+  electron.ipcMain.handle(
+    IPC_CHANNELS.backup.updateSettings,
+    async (_event, data) => {
+      return updateBackupSettings(data);
+    }
+  );
   electron.ipcMain.handle(IPC_CHANNELS.backup.connectGoogleAccount, async () => {
     return connectGoogleAccount();
   });
@@ -2931,9 +4016,16 @@ function computeKpis(now, schoolYear) {
     "vs année dernière"
   );
   const schoolYearId = schoolYear?.id ?? null;
-  const txnConditions = [drizzleOrm.eq(transactions.status, "validated"), drizzleOrm.gte(transactions.createdAt, previousMonth.from)];
+  const txnConditions = [
+    drizzleOrm.eq(transactions.status, "validated"),
+    drizzleOrm.gte(transactions.createdAt, previousMonth.from)
+  ];
   if (schoolYearId) txnConditions.push(drizzleOrm.eq(transactions.schoolYearId, schoolYearId));
-  const validatedTxns = db.select({ type: transactions.type, amount: transactions.amount, createdAt: transactions.createdAt }).from(transactions).where(drizzleOrm.and(...txnConditions)).all();
+  const validatedTxns = db.select({
+    type: transactions.type,
+    amount: transactions.amount,
+    createdAt: transactions.createdAt
+  }).from(transactions).where(drizzleOrm.and(...txnConditions)).all();
   const sumFor = (type, from, to) => validatedTxns.filter((t) => t.type === type && t.createdAt >= from && t.createdAt <= to).reduce((sum, t) => sum + t.amount, 0);
   const entriesCurrent = sumFor("entry", currentMonth.from, currentMonth.toExclusiveEnd);
   const entriesPrevious = sumFor("entry", previousMonth.from, previousMonth.toExclusiveEnd);
@@ -2960,10 +4052,18 @@ function computeCashEvolution(now, schoolYearId, monthsBack = CASH_EVOLUTION_MON
   const rangeStart = monthRange(start.year, start.monthIndex0).from;
   const conditions = [drizzleOrm.eq(transactions.status, "validated"), drizzleOrm.gte(transactions.createdAt, rangeStart)];
   if (schoolYearId) conditions.push(drizzleOrm.eq(transactions.schoolYearId, schoolYearId));
-  const rows = db.select({ type: transactions.type, amount: transactions.amount, createdAt: transactions.createdAt }).from(transactions).where(drizzleOrm.and(...conditions)).all();
+  const rows = db.select({
+    type: transactions.type,
+    amount: transactions.amount,
+    createdAt: transactions.createdAt
+  }).from(transactions).where(drizzleOrm.and(...conditions)).all();
   const points = [];
   for (let i = 0; i < monthsBack; i++) {
-    const { year, monthIndex0 } = shiftMonth(now.getFullYear(), now.getMonth(), -(monthsBack - 1) + i);
+    const { year, monthIndex0 } = shiftMonth(
+      now.getFullYear(),
+      now.getMonth(),
+      -(monthsBack - 1) + i
+    );
     const { from, toExclusiveEnd } = monthRange(year, monthIndex0);
     const inMonth = rows.filter((r) => r.createdAt >= from && r.createdAt <= toExclusiveEnd);
     points.push({
@@ -3037,7 +4137,11 @@ function computeTopExpenses(now, schoolYearId, limit = 5) {
 function describeActivity(entry) {
   const db = getDb();
   if (entry.entityType === "transaction" && entry.action === "create") {
-    const txn = db.select({ type: transactions.type, amount: transactions.amount, category: transactions.category }).from(transactions).where(drizzleOrm.eq(transactions.id, entry.entityId)).get();
+    const txn = db.select({
+      type: transactions.type,
+      amount: transactions.amount,
+      category: transactions.category
+    }).from(transactions).where(drizzleOrm.eq(transactions.id, entry.entityId)).get();
     if (!txn) return null;
     const isEntry = txn.type === "entry";
     return {
@@ -3057,7 +4161,11 @@ function describeActivity(entry) {
     };
   }
   if (entry.entityType === "student" && entry.action === "create") {
-    const student = db.select({ firstName: students.firstName, lastName: students.lastName, matricule: students.matricule }).from(students).where(drizzleOrm.eq(students.id, entry.entityId)).get();
+    const student = db.select({
+      firstName: students.firstName,
+      lastName: students.lastName,
+      matricule: students.matricule
+    }).from(students).where(drizzleOrm.eq(students.id, entry.entityId)).get();
     if (!student) return null;
     return {
       kind: "student_enrolled",
@@ -3178,6 +4286,7 @@ function registerDashboardIpcHandlers() {
 }
 function registerAllIpcHandlers() {
   registerSystemIpcHandlers();
+  registerLicenseIpcHandlers();
   registerStudentsIpcHandlers();
   registerCashboxIpcHandlers();
   registerPersonnelIpcHandlers();
@@ -3227,8 +4336,12 @@ electron.app.whenReady().then(() => {
   } catch (error) {
     console.error("[database] Échec de l'initialisation de la base de données :", error);
   }
+  touchClockRatchet();
   registerAllIpcHandlers();
   initAutoBackupScheduler();
+  resyncLicense().catch((error) => {
+    console.warn("[license] Resynchronisation au démarrage échouée (hors-ligne ?) :", error);
+  });
   createWindow();
   electron.app.on("activate", function() {
     if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();

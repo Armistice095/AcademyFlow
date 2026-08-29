@@ -1,7 +1,11 @@
 import { create } from 'zustand'
 import { api } from '@renderer/lib/ipc'
 import type { PaginatedResult } from '@shared/types/common.types'
-import type { CashboxStats, JournalFilters, JournalTransaction } from '@shared/types/transaction.types'
+import type {
+  CashboxStats,
+  JournalFilters,
+  JournalTransaction
+} from '@shared/types/transaction.types'
 
 interface CashboxState {
   stats: CashboxStats | null

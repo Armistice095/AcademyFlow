@@ -15,8 +15,13 @@ export interface BackupAccountStatus {
   lastBackupMessage: string | null
 }
 
-/** Une entrée de l'historique des sauvegardes cloud (les 7 dernières sont conservées). */
+/**
+ * Une entrée de l'historique des sauvegardes cloud (les 7 dernières sont
+ * conservées). Cette liste est lue directement depuis Google Drive — il n'y
+ * a plus de copie locale faisant foi (voir `backup.service.ts#listBackups`).
+ */
 export interface BackupHistoryEntry {
+  /** ID du fichier sur Google Drive — utilisé directement pour le téléchargement/suppression. */
   id: string
   fileName: string
   sizeBytes: number

@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { api } from '@renderer/lib/ipc'
 import type { PaginatedResult } from '@shared/types/common.types'
-import type { StudentListItem, StudentSearchQuery, StudentStats, StudentStatsQuery } from '@shared/types/student.types'
+import type {
+  StudentListItem,
+  StudentSearchQuery,
+  StudentStats,
+  StudentStatsQuery
+} from '@shared/types/student.types'
 
 interface StudentsState {
   results: PaginatedResult<StudentListItem> | null
@@ -36,7 +41,10 @@ export const useStudentsStore = create<StudentsState>((set, get) => ({
 
   refresh: async () => {
     await get().search(get().lastQuery)
-    await get().loadStats({ classId: get().lastQuery.classId, schoolYearId: get().lastQuery.schoolYearId })
+    await get().loadStats({
+      classId: get().lastQuery.classId,
+      schoolYearId: get().lastQuery.schoolYearId
+    })
   },
 
   loadStats: async (query = {}) => {

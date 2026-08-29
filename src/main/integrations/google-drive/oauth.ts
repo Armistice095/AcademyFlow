@@ -21,7 +21,10 @@ import type { OAuth2Client } from 'google-auth-library'
  * l'utilisateur.
  */
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/userinfo.email']
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/userinfo.email'
+]
 const LOOPBACK_TIMEOUT_MS = 5 * 60 * 1000
 
 export interface GoogleOAuthCredentials {
@@ -36,7 +39,7 @@ export function getOAuthCredentials(): GoogleOAuthCredentials {
 
   if (!clientId || !clientSecret) {
     throw new Error(
-      "Configuration Google Drive manquante sur ce poste. Un administrateur doit renseigner " +
+      'Configuration Google Drive manquante sur ce poste. Un administrateur doit renseigner ' +
         'GOOGLE_DRIVE_CLIENT_ID et GOOGLE_DRIVE_CLIENT_SECRET (voir .env.example à la racine du projet).'
     )
   }
@@ -104,7 +107,11 @@ export async function runLoopbackAuthorization(): Promise<GoogleAuthorizationRes
 
         settle(() => resolve({ refreshToken: tokens.refresh_token as string, accountEmail: email }))
       } catch (error) {
-        settle(() => reject(error instanceof Error ? error : new Error("Échec de l'échange du code d'autorisation.")))
+        settle(() =>
+          reject(
+            error instanceof Error ? error : new Error("Échec de l'échange du code d'autorisation.")
+          )
+        )
       }
     }
 
@@ -120,7 +127,12 @@ export async function runLoopbackAuthorization(): Promise<GoogleAuthorizationRes
 
       if (errorParam) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(buildResponsePage('Connexion annulée', 'Vous pouvez fermer cette fenêtre et revenir à AcademyFlow.'))
+        res.end(
+          buildResponsePage(
+            'Connexion annulée',
+            'Vous pouvez fermer cette fenêtre et revenir à AcademyFlow.'
+          )
+        )
         cleanup()
         settle(() => reject(new Error("Autorisation refusée par l'utilisateur.")))
         return
@@ -132,7 +144,12 @@ export async function runLoopbackAuthorization(): Promise<GoogleAuthorizationRes
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(buildResponsePage('Connexion réussie', 'Vous pouvez fermer cette fenêtre et revenir à AcademyFlow.'))
+      res.end(
+        buildResponsePage(
+          'Connexion réussie',
+          'Vous pouvez fermer cette fenêtre et revenir à AcademyFlow.'
+        )
+      )
       cleanup()
 
       void exchangeCode(code)
@@ -158,7 +175,11 @@ export async function runLoopbackAuthorization(): Promise<GoogleAuthorizationRes
 
       shell.openExternal(authUrl).catch((error) => {
         cleanup()
-        settle(() => reject(error instanceof Error ? error : new Error("Impossible d'ouvrir le navigateur système.")))
+        settle(() =>
+          reject(
+            error instanceof Error ? error : new Error("Impossible d'ouvrir le navigateur système.")
+          )
+        )
       })
     })
   })

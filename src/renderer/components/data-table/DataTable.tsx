@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
   type ColumnDef,
+  type PaginationState,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -18,6 +19,7 @@ import {
   TableRow
 } from '@renderer/components/ui/table'
 import { DataTablePagination } from './DataTablePagination'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
 
 export interface DataTableProps<TData, TValue> {
@@ -31,6 +33,17 @@ export interface DataTableProps<TData, TValue> {
   hidePagination?: boolean
   pageSize?: number
   isLoading?: boolean
+  /**
+   * Active la pagination "serveur" : `data` ne contient que la page courante
+   * (déjà découpée côté backend). Requiert `pagination`, `onPaginationChange`
+   * et `rowCount` (le nombre total de lignes, toutes pages confondues).
+   */
+  manualPagination?: boolean
+  /** État de pagination contrôlé par le parent (0-indexé), utilisé si `manualPagination` est vrai. */
+  pagination?: PaginationState
+  onPaginationChange?: (pagination: PaginationState) => void
+  /** Nombre total de lignes côté serveur (toutes pages confondues), pour l'affichage "X–Y sur Z". */
+  rowCount?: number
 }
 
 /**
@@ -46,24 +59,46 @@ export function DataTable<TData, TValue>({
   onRowClick,
   hidePagination = false,
   pageSize = 10,
-  isLoading = false
+  isLoading = false,
+  manualPagination = false,
+  pagination,
+  onPaginationChange,
+  rowCount
 }: DataTableProps<TData, TValue>): JSX.Element {
   const [sorting, setSorting] = React.useState<SortingState>([])
+  const [internalPagination, setInternalPagination] = React.useState<PaginationState>({
+    pageIndex: 0,
+    pageSize
+  })
+
+  const paginationState = manualPagination ? (pagination ?? internalPagination) : internalPagination
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: manualPagination ? undefined : getPaginationRowModel(),
     onSortingChange: setSorting,
-    initialState: { pagination: { pageSize } },
-    state: { sorting }
+    manualPagination,
+    pageCount: manualPagination
+      ? Math.max(1, Math.ceil((rowCount ?? 0) / paginationState.pageSize))
+      : undefined,
+    rowCount: manualPagination ? rowCount : undefined,
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(paginationState) : updater
+      if (manualPagination) {
+        onPaginationChange?.(next)
+      } else {
+        setInternalPagination(next)
+      }
+    },
+    state: { sorting, pagination: paginationState }
   })
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -103,11 +138,19 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                  Chargement...
-                </TableCell>
-              </TableRow>
+              Array.from({ length: paginationState.pageSize }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`} className="hover:bg-transparent">
+                  {columns.map((_, colIndex) => (
+                    <TableCell key={`skeleton-cell-${colIndex}`}>
+                      {colIndex === 0 ? (
+                        <Skeleton className="h-9 w-9 rounded-full" />
+                      ) : (
+                        <Skeleton className="h-4 w-full max-w-32" />
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
             ) : table.getRowModel().rows.length > 0 ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
@@ -124,7 +167,10 @@ export function DataTable<TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -132,7 +178,9 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {!hidePagination && data.length > 0 && <DataTablePagination table={table} />}
+      {!hidePagination && (manualPagination ? (rowCount ?? 0) > 0 : data.length > 0) && (
+        <DataTablePagination table={table} rowCount={manualPagination ? rowCount : undefined} />
+      )}
     </div>
   )
 }

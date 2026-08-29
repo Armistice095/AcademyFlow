@@ -2,8 +2,14 @@ import type { SearchQuery } from './common.types'
 
 export type Gender = 'M' | 'F'
 
-/** Statut administratif de la fiche élève. */
-export type StudentStatus = 'nouveau' | 'redoublant'
+/**
+ * Statut d'historique d'un élève — TOUJOURS calculé, jamais stocké (voir
+ * `getEnrollmentHistoryStatus` dans student.service.ts). `nouveau` signifie
+ * que l'inscription considérée est la toute première de l'élève dans
+ * l'établissement ; sinon `ancien`. Une fois `ancien`, un élève ne redevient
+ * jamais `nouveau`, même s'il redouble (voir `EnrollmentStatus` pour ça).
+ */
+export type StudentHistoryStatus = 'nouveau' | 'ancien'
 
 /** Statut de progression pour une inscription donnée (BR-003). */
 export type EnrollmentStatus = 'admis' | 'redoublant'
@@ -48,13 +54,19 @@ export interface Student {
   nationality: string
   address: string | null
   previousSchool: string | null
-  status: StudentStatus
   isActive: boolean
   createdAt: string
   updatedAt: string
   createdBy: string | null
   /** Présent uniquement lorsque la fiche est chargée avec ses responsables. */
   guardians?: Guardian[]
+  /**
+   * Calculé (jamais stocké) : `nouveau` si l'élève n'a encore jamais été
+   * inscrit avant sa toute première inscription en base, `ancien` sinon.
+   * Reflète l'historique global de l'élève, pas une année en particulier —
+   * pour le statut d'une inscription précise, voir `EnrollmentWithDetails`.
+   */
+  historyStatus?: StudentHistoryStatus
 }
 
 export interface CreateStudentDTO {
@@ -67,7 +79,6 @@ export interface CreateStudentDTO {
   address?: string
   /** Renseigné si l'élève vient d'une autre école (transfert). */
   previousSchool?: string
-  status?: StudentStatus
   /** Data URL base64 de la photo (voir ImageUpload) — colonne DB `photo_path`, réutilisée pour stocker la donnée directement. */
   photoPath?: string
   /** Classe d'affectation pour l'inscription initiale (année scolaire en cours). */
@@ -119,6 +130,7 @@ export interface StudentStats {
  * Variante de `Student` enrichie avec la classe courante — utilisée par
  * `search()` et `listByClass()` lorsqu'un `schoolYearId` est fourni, pour
  * afficher la colonne "classe" dans les listes sans requête supplémentaire.
+ * `historyStatus` est calculé en lot pour toute la liste (voir service).
  */
 export interface StudentListItem extends Student {
   className: string | null

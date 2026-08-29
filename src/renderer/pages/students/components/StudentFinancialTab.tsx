@@ -4,7 +4,14 @@ import { FileDown, MoreHorizontal, Plus, Receipt as ReceiptIcon, TrendingUp } fr
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@renderer/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@renderer/components/ui/table'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +19,7 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { EChart, type EChartsOption } from '@renderer/components/charts/EChart'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { useToast } from '@renderer/lib/use-toast'
 import { api } from '@renderer/lib/ipc'
 import { openPdf } from '@renderer/lib/pdf'
@@ -20,8 +28,13 @@ import { ReceiptPDF } from '@renderer/pdf/ReceiptPDF'
 import { StudentAccountPDF } from '@renderer/pdf/StudentAccountPDF'
 import { buildStudentPaymentRows, PAYMENT_ROW_STATUS_LABELS } from '@renderer/lib/tuition'
 import { formatCFA, formatDateShort } from '@renderer/lib/formatters'
+import { cn } from '@renderer/lib/utils'
 import type { Student } from '@shared/types/student.types'
-import type { StudentPaymentRow, Transaction, TuitionAccount } from '@shared/types/transaction.types'
+import type {
+  StudentPaymentRow,
+  Transaction,
+  TuitionAccount
+} from '@shared/types/transaction.types'
 
 const STATUS_BADGE_VARIANT: Record<StudentPaymentRow['status'], 'success' | 'secondary'> = {
   paye: 'success',
@@ -67,7 +80,11 @@ export function StudentFinancialTab({
         data: points.map((p) => p[0]),
         axisLine: { lineStyle: { color: '#e2e8f0' } },
         axisTick: { show: false },
-        axisLabel: { color: '#334155', fontSize: 11, formatter: (value: string) => formatDateShort(value) }
+        axisLabel: {
+          color: '#334155',
+          fontSize: 11,
+          formatter: (value: string) => formatDateShort(value)
+        }
       },
       yAxis: {
         type: 'value',
@@ -112,6 +129,8 @@ export function StudentFinancialTab({
   }, [transactions])
 
   const hasPayments = transactions.some((t) => t.status === 'validated')
+  const remaining = Math.max(account?.balance ?? 0, 0)
+  const hasArrears = (account?.installments ?? []).some((line) => line.status === 'en_arriere')
 
   const handleDownload = async (): Promise<void> => {
     setDownloading(true)
@@ -129,7 +148,11 @@ export function StudentFinancialTab({
         `compte-scolarite-${student.matricule}.pdf`
       )
     } catch {
-      toast({ title: 'Échec de la génération', description: 'Impossible de générer le PDF.', variant: 'destructive' })
+      toast({
+        title: 'Échec de la génération',
+        description: 'Impossible de générer le PDF.',
+        variant: 'destructive'
+      })
     } finally {
       setDownloading(false)
     }
@@ -140,7 +163,11 @@ export function StudentFinancialTab({
       const transaction = transactions.find((t) => t.id === transactionId)
       const receipt = await api.cashbox.getReceipt(transactionId)
       if (!receipt || !transaction) {
-        toast({ title: 'Aucun reçu', description: "Cette opération n'a pas de reçu associé.", variant: 'destructive' })
+        toast({
+          title: 'Aucun reçu',
+          description: "Cette opération n'a pas de reçu associé.",
+          variant: 'destructive'
+        })
         return
       }
       await printReceiptWithFallback(receipt.id, async () => {
@@ -161,7 +188,11 @@ export function StudentFinancialTab({
         )
       })
     } catch {
-      toast({ title: 'Échec', description: "Impossible d'afficher le reçu.", variant: 'destructive' })
+      toast({
+        title: 'Échec',
+        description: "Impossible d'afficher le reçu.",
+        variant: 'destructive'
+      })
     }
   }
 
@@ -169,13 +200,24 @@ export function StudentFinancialTab({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Historique des paiements</CardTitle>
+          <div>
+            <CardTitle>Historique des paiements</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">Année scolaire {schoolYearLabel}</p>
+          </div>
           <div className="flex gap-2">
-            <Button className="gap-1.5" onClick={() => navigate(`/cashbox/new?studentId=${student.id}`)}>
+            <Button
+              className="gap-1.5"
+              onClick={() => navigate(`/cashbox/new?studentId=${student.id}`)}
+            >
               <Plus className="h-4 w-4" />
               Nouveau Paiement
             </Button>
-            <Button variant="outline" className="gap-1.5" onClick={handleDownload} disabled={downloading}>
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={handleDownload}
+              disabled={downloading}
+            >
               <FileDown className="h-4 w-4" />
               {downloading ? 'Export...' : 'Télécharger'}
             </Button>
@@ -183,16 +225,25 @@ export function StudentFinancialTab({
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {loading ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">Chargement...</p>
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-1">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+              ))}
+            </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Description / Frais</TableHead>
-                  <TableHead>Montant</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="w-12">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -200,15 +251,22 @@ export function StudentFinancialTab({
                   <TableRow key={`${row.transactionId}-${index}`}>
                     <TableCell>{formatDateShort(row.date)}</TableCell>
                     <TableCell>{row.description}</TableCell>
-                    <TableCell className="font-mono">{formatCFA(row.amount)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatCFA(row.amount)}</TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{PAYMENT_ROW_STATUS_LABELS[row.status]}</Badge>
+                      <Badge variant={STATUS_BADGE_VARIANT[row.status]}>
+                        {PAYMENT_ROW_STATUS_LABELS[row.status]}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {row.transactionId && row.status === 'paye' && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="Actions sur ce paiement"
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -227,7 +285,9 @@ export function StudentFinancialTab({
             </Table>
           )}
           {!loading && rows.length === 0 && (
-            <p className="p-6 text-center text-sm text-muted-foreground">Aucun paiement enregistré.</p>
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Aucun paiement enregistré pour l’année {schoolYearLabel}.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -251,13 +311,31 @@ export function StudentFinancialTab({
           <div className="grid grid-cols-2 gap-3 border-t border-border pt-4">
             <div>
               <p className="text-xs text-muted-foreground">Total Payé</p>
-              <p className="font-mono text-lg font-semibold text-primary">{formatCFA(account?.totalPaid ?? 0)}</p>
+              <p className="font-mono text-lg font-semibold text-primary">
+                {formatCFA(account?.totalPaid ?? 0)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Reste à payer</p>
               <p className="font-mono text-lg font-semibold text-foreground">
-                {formatCFA(Math.max(account?.balance ?? 0, 0))}
+                {formatCFA(remaining)}
               </p>
+              {remaining > 0 && (
+                <p
+                  className={cn(
+                    'mt-0.5 flex items-center gap-1.5 text-xs font-medium',
+                    hasArrears ? 'text-destructive' : 'text-success'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      hasArrears ? 'bg-destructive' : 'bg-success'
+                    )}
+                  />
+                  {hasArrears ? 'En retard' : 'À jour'}
+                </p>
+              )}
             </div>
           </div>
         </CardContent>

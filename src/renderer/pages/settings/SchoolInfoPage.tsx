@@ -55,7 +55,10 @@ export function SchoolInfoPage(): JSX.Element {
         stampDataUrl: info.stampDataUrl
       })
       setInfo(updated)
-      toast({ title: 'Informations enregistrées', description: "Les informations de l'établissement ont été mises à jour." })
+      toast({
+        title: 'Informations enregistrées',
+        description: "Les informations de l'établissement ont été mises à jour."
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Échec de la sauvegarde.')
     } finally {
@@ -71,13 +74,18 @@ export function SchoolInfoPage(): JSX.Element {
     <Card>
       <CardContent className="p-6">
         <p className="mb-4 text-sm text-muted-foreground">
-          Ces informations personnalisent les documents administratifs générés par l'application
+          Ces informations personnalisent les documents administratifs générés par l’application
           (certificats, attestations, reçus, rapports).
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Nom de l'établissement" htmlFor="school-name" required className="sm:col-span-2">
+            <FormField
+              label="Nom de l'établissement"
+              htmlFor="school-name"
+              required
+              className="sm:col-span-2"
+            >
               <Input
                 id="school-name"
                 value={info.name}

@@ -1,0 +1,1 @@
+CREATE INDEX `enrollments_class_year_idx` ON `ENROLLMENTS` (`class_id`,`school_year_id`);

@@ -99,7 +99,10 @@ export function Header(): JSX.Element {
               <KeyRound className="mr-2 h-4 w-4" />
               Changer le mot de passe
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive"
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Déconnexion
             </DropdownMenuItem>

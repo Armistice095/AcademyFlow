@@ -6,6 +6,7 @@ import { loadEnvFile } from './config/env'
 import { initDatabase, closeConnection } from './database'
 import { registerAllIpcHandlers } from './ipc/register-all'
 import { initAutoBackupScheduler, stopAutoBackupScheduler } from './services/backup.service'
+import { touchClockRatchet, resyncLicense } from './services/license.service'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -52,11 +53,21 @@ app.whenReady().then(() => {
   try {
     initDatabase()
   } catch (error) {
-    console.error('[database] Échec de l\'initialisation de la base de données :', error)
+    console.error("[database] Échec de l'initialisation de la base de données :", error)
   }
+
+  // Cliquet anti-recul d'horloge : doit s'exécuter avant tout affichage,
+  // une seule fois par lancement (voir license.service.ts).
+  touchClockRatchet()
 
   registerAllIpcHandlers()
   initAutoBackupScheduler()
+
+  // Resynchronisation opportuniste de la licence — best-effort, jamais
+  // bloquant pour le démarrage (voir license.service.ts::resyncLicense).
+  resyncLicense().catch((error) => {
+    console.warn('[license] Resynchronisation au démarrage échouée (hors-ligne ?) :', error)
+  })
 
   createWindow()
 

@@ -1,5 +1,6 @@
 import type { CashCategory } from '../constants/categories'
 import type { SearchQuery } from './common.types'
+import type { TuitionTarget } from './settings.types'
 
 export type TransactionType = 'entry' | 'exit'
 export type TransactionStatus = 'validated' | 'cancelled'
@@ -51,6 +52,8 @@ export interface JournalFilters extends SearchQuery {
   dateTo?: string
   /** Limite le journal à une année scolaire donnée (par défaut : année en cours, voir F-015). */
   schoolYearId?: string
+  /** Restreint aux élèves inscrits dans cette classe pour l'année scolaire en cours (page Rapports). */
+  classId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,7 @@ export interface TuitionAccountLine {
   paidAmount: number
   /** BR-010 : en arriéré si échéance dépassée et montant non intégralement payé. */
   status: 'a_jour' | 'en_arriere'
+  appliesTo: TuitionTarget
 }
 
 export interface TuitionAccount {
@@ -120,14 +124,105 @@ export interface CashboxStats {
 }
 
 // ---------------------------------------------------------------------------
-// Rapport de caisse (F-017)
+// Rapport de caisse (F-017 → refonte "Rapports v2")
 // ---------------------------------------------------------------------------
 
-export interface CashReport {
+/** Filtres communs aux 6 onglets de la page Rapports, portés par `reports.store.ts`. */
+export interface ReportFilters {
   from: string
   to: string
+  /** Restreint aux élèves inscrits dans cette classe pour l'année scolaire en cours. */
+  classId?: string
+  category?: CashCategory
+  /** Caissier (utilisateur ayant enregistré l'opération). */
+  userId?: string
+}
+
+/**
+ * Indicateurs de la carte "5 KPI" de la Vue générale.
+ * Les `*ChangePct` comparent à la période précédente de même durée,
+ * immédiatement avant `from` (`null` si la période de référence est à zéro —
+ * comparaison non significative, voir `computeGrowthPct`).
+ */
+export interface ReportKpis {
   totalEntries: number
   totalExits: number
   netBalance: number
-  byCategory: Record<CashCategory, number>
+  transactionCount: number
+  /** Snapshot courant des arriérés, INDÉPENDANT de la période filtrée (voir hypothèses du plan). */
+  totalArrears: number
+  totalEntriesChangePct: number | null
+  totalExitsChangePct: number | null
+  netBalanceChangePct: number | null
+  transactionCountChangePct: number | null
+  /** Toujours `null` pour l'instant — pas d'historique des arriérés disponible (voir plan §1.2.5). */
+  totalArrearsChangePct: number | null
+}
+
+/** Point de la courbe "Évolution des entrées et sorties", une entrée par jour de la période. */
+export interface ReportTimeSeriesPoint {
+  date: string // 'YYYY-MM-DD'
+  entries: number
+  exits: number
+}
+
+/** Ligne du donut "Répartition des entrées par catégorie" (entrées uniquement). */
+export interface ReportCategoryBreakdown {
+  category: CashCategory
+  amount: number
+  percentage: number
+}
+
+/** Rapport complet de la Vue générale (F-017 refonte). */
+export interface CashReportV2 {
+  from: string
+  to: string
+  /** Solde de caisse réel cumulé jusqu'à la veille du `from` — jamais filtré (voir plan §1.2.3). */
+  openingBalance: number
+  kpis: ReportKpis
+  byCategory: ReportCategoryBreakdown[]
+  timeSeries: ReportTimeSeriesPoint[]
+}
+
+// ---------------------------------------------------------------------------
+// Rapports "Recettes" / "Dépenses" (F-017 refonte, Phase 3)
+// ---------------------------------------------------------------------------
+
+/** Point de la courbe d'un rapport à un seul type d'opération (Recettes ou Dépenses). */
+export interface TypeReportSeriesPoint {
+  date: string // 'YYYY-MM-DD'
+  amount: number
+}
+
+/** Rapport recentré sur un seul type d'opération — onglets "Recettes" et "Dépenses" (plan §3). */
+export interface TypeReport {
+  type: TransactionType
+  total: number
+  totalChangePct: number | null
+  transactionCount: number
+  transactionCountChangePct: number | null
+  byCategory: ReportCategoryBreakdown[]
+  timeSeries: TypeReportSeriesPoint[]
+}
+
+// ---------------------------------------------------------------------------
+// Rapports "Par classe" / "Par caissier" (F-017 refonte, Phase 3)
+// ---------------------------------------------------------------------------
+
+export interface ReportByClassRow {
+  classId: string
+  className: string
+  totalEntries: number
+  totalExits: number
+  netBalance: number
+  transactionCount: number
+}
+
+export interface ReportByCashierRow {
+  userId: string
+  cashierName: string
+  totalEntries: number
+  totalExits: number
+  netBalance: number
+  transactionCount: number
 }

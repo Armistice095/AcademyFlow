@@ -2,8 +2,10 @@ import * as React from 'react'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
-export interface DatePickerFieldProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> {
+export interface DatePickerFieldProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'type' | 'value' | 'onChange'
+> {
   /** Valeur au format ISO `yyyy-MM-dd`. */
   value: string
   onChange: (value: string) => void

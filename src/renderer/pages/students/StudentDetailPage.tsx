@@ -4,11 +4,12 @@ import {
   FileBadge,
   FileText,
   IdCard,
+  Loader2,
   Pencil,
   Save,
   Trash2,
-  User,
   UserPlus,
+  UserX,
   X
 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
@@ -16,14 +17,23 @@ import { Badge } from '@renderer/components/ui/badge'
 import { Input } from '@renderer/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@renderer/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
+import { Separator } from '@renderer/components/ui/separator'
 import { FormField } from '@renderer/components/forms/FormField'
 import { DatePickerField } from '@renderer/components/forms/DatePickerField'
 import { ImageUpload } from '@renderer/components/forms/ImageUpload'
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
+import { Skeleton } from '@renderer/components/ui/skeleton'
+import { StudentAvatar } from '@renderer/components/students/StudentAvatar'
 import { StudentProfileCard } from './components/StudentProfileCard'
 import { StudentFinancialTab } from './components/StudentFinancialTab'
+import { StudentHistoryTab } from './components/StudentHistoryTab'
 import { useToast } from '@renderer/lib/use-toast'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { api } from '@renderer/lib/ipc'
@@ -32,13 +42,18 @@ import { formatDate, formatMatricule } from '@renderer/lib/formatters'
 import { EnrollmentCertPDF } from '@renderer/pdf/EnrollmentCertPDF'
 import { SchoolCertPDF } from '@renderer/pdf/SchoolCertPDF'
 import { StudentFilePDF } from '@renderer/pdf/StudentFilePDF'
-import type { EnrollmentWithDetails, Guardian, Student, UpdateStudentDTO } from '@shared/types/student.types'
+import type {
+  EnrollmentWithDetails,
+  Guardian,
+  Student,
+  UpdateStudentDTO
+} from '@shared/types/student.types'
 import type { Transaction, TuitionAccount } from '@shared/types/transaction.types'
 
-const STATUS_LABELS: Record<string, string> = {
+/** Statut d'historique global de l'élève (calculé — voir `getEnrollmentHistoryStatus`). */
+const HISTORY_STATUS_LABELS: Record<string, string> = {
   nouveau: 'Nouveau',
-  redoublant: 'Redoublant',
-  admis: 'Admis(e)'
+  ancien: 'Ancien'
 }
 
 export function StudentDetailPage(): JSX.Element {
@@ -85,13 +100,21 @@ export function StudentDetailPage(): JSX.Element {
   useEffect(() => {
     if (!id) return
     setFinancialLoading(true)
-    Promise.all([api.cashbox.getStudentAccount(id), api.cashbox.getJournal({ studentId: id, type: 'entry', pageSize: 1000 })])
+    Promise.all([
+      api.cashbox.getStudentAccount(id),
+      api.cashbox.getJournal({
+        studentId: id,
+        type: 'entry',
+        schoolYearId: currentSchoolYear?.id,
+        pageSize: 1000
+      })
+    ])
       .then(([accountData, journal]) => {
         setAccount(accountData)
         setTransactions(journal.items)
       })
       .finally(() => setFinancialLoading(false))
-  }, [id])
+  }, [id, currentSchoolYear])
 
   const currentEnrollment = history.find((h) => h.schoolYearId === currentSchoolYear?.id)
 
@@ -106,7 +129,6 @@ export function StudentDetailPage(): JSX.Element {
       nationality: student.nationality,
       address: student.address ?? undefined,
       previousSchool: student.previousSchool ?? undefined,
-      status: student.status,
       photoPath: student.photoPath ?? undefined
     })
     setActiveTab('info')
@@ -156,12 +178,22 @@ export function StudentDetailPage(): JSX.Element {
 
       if (type === 'enrollment') {
         await openPdf(
-          <EnrollmentCertPDF student={student} className={className} schoolYearLabel={schoolYearLabel} schoolInfo={schoolInfo} />,
+          <EnrollmentCertPDF
+            student={student}
+            className={className}
+            schoolYearLabel={schoolYearLabel}
+            schoolInfo={schoolInfo}
+          />,
           `attestation-${student.matricule}.pdf`
         )
       } else if (type === 'school-cert') {
         await openPdf(
-          <SchoolCertPDF student={student} className={className} schoolYearLabel={schoolYearLabel} schoolInfo={schoolInfo} />,
+          <SchoolCertPDF
+            student={student}
+            className={className}
+            schoolYearLabel={schoolYearLabel}
+            schoolInfo={schoolInfo}
+          />,
           `certificat-${student.matricule}.pdf`
         )
       } else {
@@ -171,17 +203,47 @@ export function StudentDetailPage(): JSX.Element {
         )
       }
     } catch {
-      toast({ title: 'Échec de la génération', description: 'Impossible de générer le document.', variant: 'destructive' })
+      toast({
+        title: 'Échec de la génération',
+        description: 'Impossible de générer le document.',
+        variant: 'destructive'
+      })
     } finally {
       setGeneratingDoc(null)
     }
   }
 
   if (loading) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Chargement...</p>
+    return (
+      <div className="mx-auto flex max-w-6xl flex-col gap-4">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-16 w-16 rounded-full" />
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        </div>
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    )
   }
   if (!student) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Élève introuvable.</p>
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <UserX className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-foreground">Élève introuvable</p>
+          <p className="text-sm text-muted-foreground">
+            Cette fiche n’existe pas ou a été supprimée.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate('/students')}>
+          Retour à la liste des élèves
+        </Button>
+      </div>
+    )
   }
 
   return (
@@ -189,17 +251,13 @@ export function StudentDetailPage(): JSX.Element {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="relative">
-            {student.photoPath ? (
-              <img
-                src={student.photoPath}
-                alt={`${student.firstName} ${student.lastName}`}
-                className="h-16 w-16 rounded-full border border-border object-cover"
-              />
-            ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-input bg-muted">
-                <User className="h-6 w-6 text-muted-foreground" />
-              </div>
-            )}
+            <StudentAvatar
+              firstName={student.firstName}
+              lastName={student.lastName}
+              photoPath={student.photoPath}
+              size="lg"
+              className="text-xl"
+            />
             <button
               type="button"
               onClick={startEdit}
@@ -211,28 +269,70 @@ export function StudentDetailPage(): JSX.Element {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-xl font-semibold text-foreground">
                 {student.lastName} {student.firstName}
               </h1>
-              <Badge variant="secondary">{STATUS_LABELS[student.status] ?? student.status}</Badge>
+              {student.historyStatus && (
+                <Badge variant={student.historyStatus === 'nouveau' ? 'success' : 'outline'}>
+                  {HISTORY_STATUS_LABELS[student.historyStatus] ?? student.historyStatus}
+                </Badge>
+              )}
             </div>
-            <p className="font-mono text-sm text-muted-foreground">{formatMatricule(student.matricule)}</p>
+            <p className="font-mono text-sm text-muted-foreground">
+              {formatMatricule(student.matricule)}
+            </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateDocument('enrollment')} disabled={generatingDoc !== null}>
-            <FileBadge className="h-4 w-4" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => generateDocument('enrollment')}
+            disabled={generatingDoc !== null}
+          >
+            {generatingDoc === 'enrollment' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileBadge className="h-4 w-4" />
+            )}
             Attestation
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateDocument('school-cert')} disabled={generatingDoc !== null}>
-            <FileText className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => generateDocument('school-cert')}
+            disabled={generatingDoc !== null}
+          >
+            {generatingDoc === 'school-cert' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
             Certificat
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateDocument('file')} disabled={generatingDoc !== null}>
-            <IdCard className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => generateDocument('file')}
+            disabled={generatingDoc !== null}
+          >
+            {generatingDoc === 'file' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <IdCard className="h-4 w-4" />
+            )}
             Fiche
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" onClick={openDeleteDialog}>
+          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={openDeleteDialog}
+          >
             <Trash2 className="h-4 w-4" />
             Supprimer
           </Button>
@@ -259,7 +359,12 @@ export function StudentDetailPage(): JSX.Element {
                     </Button>
                   ) : (
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditMode(false)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setEditMode(false)}
+                      >
                         <X className="h-4 w-4" />
                         Annuler
                       </Button>
@@ -283,13 +388,26 @@ export function StudentDetailPage(): JSX.Element {
                     {editMode ? (
                       <>
                         <FormField label="Nom" htmlFor="edit-lastName">
-                          <Input id="edit-lastName" value={draft.lastName ?? ''} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
+                          <Input
+                            id="edit-lastName"
+                            value={draft.lastName ?? ''}
+                            onChange={(e) => setDraft({ ...draft, lastName: e.target.value })}
+                          />
                         </FormField>
                         <FormField label="Prénom(s)" htmlFor="edit-firstName">
-                          <Input id="edit-firstName" value={draft.firstName ?? ''} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
+                          <Input
+                            id="edit-firstName"
+                            value={draft.firstName ?? ''}
+                            onChange={(e) => setDraft({ ...draft, firstName: e.target.value })}
+                          />
                         </FormField>
                         <FormField label="Sexe" htmlFor="edit-gender">
-                          <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v as Student['gender'] })}>
+                          <Select
+                            value={draft.gender}
+                            onValueChange={(v) =>
+                              setDraft({ ...draft, gender: v as Student['gender'] })
+                            }
+                          >
                             <SelectTrigger id="edit-gender">
                               <SelectValue />
                             </SelectTrigger>
@@ -307,30 +425,53 @@ export function StudentDetailPage(): JSX.Element {
                           />
                         </FormField>
                         <FormField label="Lieu de naissance" htmlFor="edit-pob">
-                          <Input id="edit-pob" value={draft.placeOfBirth ?? ''} onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })} />
+                          <Input
+                            id="edit-pob"
+                            value={draft.placeOfBirth ?? ''}
+                            onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })}
+                          />
                         </FormField>
                         <FormField label="Nationalité" htmlFor="edit-nat">
-                          <Input id="edit-nat" value={draft.nationality ?? ''} onChange={(e) => setDraft({ ...draft, nationality: e.target.value })} />
+                          <Input
+                            id="edit-nat"
+                            value={draft.nationality ?? ''}
+                            onChange={(e) => setDraft({ ...draft, nationality: e.target.value })}
+                          />
                         </FormField>
                         <FormField label="Adresse" htmlFor="edit-addr" className="sm:col-span-2">
-                          <Input id="edit-addr" value={draft.address ?? ''} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+                          <Input
+                            id="edit-addr"
+                            value={draft.address ?? ''}
+                            onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+                          />
                         </FormField>
                       </>
                     ) : (
                       <>
                         <InfoRow label="Nom" value={student.lastName} />
-                        <InfoRow label="Sexe" value={student.gender === 'M' ? 'Masculin' : 'Féminin'} />
+                        <InfoRow
+                          label="Sexe"
+                          value={student.gender === 'M' ? 'Masculin' : 'Féminin'}
+                        />
                         <InfoRow label="Prénoms" value={student.firstName} />
                         <InfoRow label="Nationalité" value={student.nationality} />
-                        <InfoRow label="Date de naissance" value={formatDate(student.dateOfBirth)} />
+                        <InfoRow
+                          label="Date de naissance"
+                          value={formatDate(student.dateOfBirth)}
+                        />
                         <InfoRow label="Adresse" value={student.address ?? '—'} />
                         <InfoRow label="Lieu de naissance" value={student.placeOfBirth ?? '—'} />
                         <InfoRow
                           label="Téléphone des parents"
                           value={student.guardians?.[0]?.phone ?? '—'}
                         />
-                        <InfoRow label="Classe actuelle" value={currentEnrollment?.className ?? '—'} />
-                        {student.previousSchool && <InfoRow label="École de provenance" value={student.previousSchool} />}
+                        <InfoRow
+                          label="Classe actuelle"
+                          value={currentEnrollment?.className ?? '—'}
+                        />
+                        {student.previousSchool && (
+                          <InfoRow label="École de provenance" value={student.previousSchool} />
+                        )}
                       </>
                     )}
                   </div>
@@ -363,33 +504,7 @@ export function StudentDetailPage(): JSX.Element {
         </TabsContent>
 
         <TabsContent value="history">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Année scolaire</TableHead>
-                    <TableHead>Classe</TableHead>
-                    <TableHead>Statut</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>{entry.schoolYearLabel}</TableCell>
-                      <TableCell>{entry.className}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{STATUS_LABELS[entry.status] ?? entry.status}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {history.length === 0 && (
-                <p className="p-6 text-center text-sm text-muted-foreground">Aucun historique disponible.</p>
-              )}
-            </CardContent>
-          </Card>
+          <StudentHistoryTab history={history} currentSchoolYearId={currentSchoolYear?.id} />
         </TabsContent>
 
         <TabsContent value="financial">
@@ -430,7 +545,13 @@ function InfoRow({ label, value }: { label: string; value: string }): JSX.Elemen
   )
 }
 
-function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onChanged: () => void }): JSX.Element {
+function EditableGuardianRow({
+  guardian,
+  onChanged
+}: {
+  guardian: Guardian
+  onChanged: () => void
+}): JSX.Element {
   const { toast } = useToast()
   const [editing, setEditing] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -457,7 +578,10 @@ function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onCh
   const handleSave = async (): Promise<void> => {
     setSaving(true)
     try {
-      await api.students.updateGuardian(guardian.id, { ...form, profession: form.profession || undefined })
+      await api.students.updateGuardian(guardian.id, {
+        ...form,
+        profession: form.profession || undefined
+      })
       setEditing(false)
       onChanged()
       toast({ title: 'Responsable mis à jour' })
@@ -510,7 +634,11 @@ function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onCh
               onChange={(e) => setForm({ ...form, profession: e.target.value })}
             />
           </FormField>
-          <FormField label="Lien de parenté" htmlFor={`g-${guardian.id}-relationship`} className="sm:col-span-2">
+          <FormField
+            label="Lien de parenté"
+            htmlFor={`g-${guardian.id}-relationship`}
+            className="sm:col-span-2"
+          >
             <Input
               id={`g-${guardian.id}-relationship`}
               value={form.relationship}
@@ -534,7 +662,8 @@ function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onCh
     <div className="flex items-center justify-between rounded-md border border-border px-4 py-2.5">
       <div>
         <p className="text-sm font-medium">
-          {guardian.lastName} {guardian.firstName} <span className="text-muted-foreground">({guardian.relationship})</span>
+          {guardian.lastName} {guardian.firstName}{' '}
+          <span className="text-muted-foreground">({guardian.relationship})</span>
         </p>
         <p className="text-xs text-muted-foreground">
           {guardian.phone}
@@ -568,16 +697,31 @@ function EditableGuardianRow({ guardian, onChanged }: { guardian: Guardian; onCh
   )
 }
 
-function AddGuardianButton({ studentId, onAdded }: { studentId: string; onAdded: () => void }): JSX.Element {
+function AddGuardianButton({
+  studentId,
+  onAdded
+}: {
+  studentId: string
+  onAdded: () => void
+}): JSX.Element {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ lastName: '', firstName: '', phone: '', profession: '', relationship: '' })
+  const [form, setForm] = useState({
+    lastName: '',
+    firstName: '',
+    phone: '',
+    profession: '',
+    relationship: ''
+  })
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (): Promise<void> => {
     setSubmitting(true)
     try {
-      await api.students.addGuardian(studentId, { ...form, profession: form.profession || undefined })
+      await api.students.addGuardian(studentId, {
+        ...form,
+        profession: form.profession || undefined
+      })
       setOpen(false)
       setForm({ lastName: '', firstName: '', phone: '', profession: '', relationship: '' })
       onAdded()
@@ -598,10 +742,30 @@ function AddGuardianButton({ studentId, onAdded }: { studentId: string; onAdded:
 
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <Input placeholder="Nom" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="w-28" />
-      <Input placeholder="Prénom" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="w-28" />
-      <Input placeholder="Téléphone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-32" />
-      <Input placeholder="Lien" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} className="w-28" />
+      <Input
+        placeholder="Nom"
+        value={form.lastName}
+        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+        className="w-28"
+      />
+      <Input
+        placeholder="Prénom"
+        value={form.firstName}
+        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+        className="w-28"
+      />
+      <Input
+        placeholder="Téléphone"
+        value={form.phone}
+        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+        className="w-32"
+      />
+      <Input
+        placeholder="Lien"
+        value={form.relationship}
+        onChange={(e) => setForm({ ...form, relationship: e.target.value })}
+        className="w-28"
+      />
       <Button size="sm" onClick={handleSubmit} disabled={submitting}>
         OK
       </Button>

@@ -12,8 +12,8 @@ export function SettingsPage(): JSX.Element {
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Paramètres</h1>
         <p className="text-sm text-muted-foreground">
-          Configuration de l'année scolaire, des barèmes de frais, de l'établissement, de
-          l'impression, de la sauvegarde et des comptes utilisateurs.
+          Configuration de l’année scolaire, des barèmes de frais, de l’établissement, de
+          l’impression, de la sauvegarde et des comptes utilisateurs.
         </p>
       </div>
 

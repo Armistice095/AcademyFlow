@@ -4,7 +4,12 @@ import * as cashboxService from '@main/services/cashbox.service'
 import * as tuitionService from '@main/services/tuition.service'
 import * as receiptService from '@main/services/receipt.service'
 import * as authService from '@main/services/auth.service'
-import type { CreateTransactionDTO, JournalFilters } from '@shared/types/transaction.types'
+import type {
+  CreateTransactionDTO,
+  JournalFilters,
+  ReportFilters,
+  TransactionType
+} from '@shared/types/transaction.types'
 
 function requireCurrentUserId(): string {
   const session = authService.getCurrentSession()
@@ -38,9 +43,30 @@ export function registerCashboxIpcHandlers(): void {
     return tuitionService.getArrearsStudents()
   })
 
-  ipcMain.handle(IPC_CHANNELS.cashbox.getReport, async (_event, from: string, to: string) => {
-    return cashboxService.getReport(from, to)
+  ipcMain.handle(IPC_CHANNELS.cashbox.getReportV2, async (_event, filters: ReportFilters) => {
+    return cashboxService.getReportV2(filters)
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.cashbox.getTypeReport,
+    async (_event, filters: ReportFilters, type: TransactionType) => {
+      return cashboxService.getTypeReport(filters, type)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.cashbox.getReportByClass,
+    async (_event, filters: Pick<ReportFilters, 'from' | 'to' | 'category' | 'userId'>) => {
+      return cashboxService.getReportByClass(filters)
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.cashbox.getReportByCashier,
+    async (_event, filters: Pick<ReportFilters, 'from' | 'to' | 'classId' | 'category'>) => {
+      return cashboxService.getReportByCashier(filters)
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.cashbox.getReceipt, async (_event, transactionId: string) => {
     return receiptService.getReceiptByTransaction(transactionId)

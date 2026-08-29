@@ -6,11 +6,20 @@ directories:
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  - '!scripts/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,eslint.config.js,.prettierignore,.prettierrc,tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!drizzle.config.ts'
+  - '!components.json'
+  - '!postcss.config.{js,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,eslint.config.{js,mjs,cjs},.prettierignore,.prettierrc,tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-asarUnpack:
-  - resources/**
+  # Documentation interne / assets de design — sans rapport avec l'app packagée
+  # (le logo réellement utilisé vit dans src/renderer/assets, embarqué par Vite)
+  - '!{README.md,ARCHITECTURE.md,design.jpg,logo.png}'
+  # resources/** est copié séparément via `extraResources` ci-dessous et lu à
+  # l'exécution depuis `process.resourcesPath` (voir src/main/database/migrate.ts) —
+  # inutile de le dupliquer dans l'app.asar.
+  - '!resources/*'
 
 win:
   executableName: AcademyFlow

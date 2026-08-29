@@ -1,11 +1,9 @@
 import { existsSync, mkdirSync, copyFileSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { desc, eq } from 'drizzle-orm'
 import { format } from 'date-fns'
 import { app } from 'electron'
-import { getDb, getSqlite, getDatabasePath, closeConnection } from '@main/database'
-import { backupHistory } from '@main/database/schema'
+import { getSqlite, getDatabasePath, closeConnection } from '@main/database'
 import * as backupConfigService from './backup-config.service'
 import { runLoopbackAuthorization } from '@main/integrations/google-drive/oauth'
 import {
@@ -14,9 +12,15 @@ import {
   uploadBackupFile,
   downloadBackupFile,
   deleteBackupFile,
-  encryptRefreshToken
+  listBackupFiles,
+  encryptRefreshToken,
+  type DriveBackupFile
 } from '@main/integrations/google-drive/client'
-import type { BackupAccountStatus, BackupHistoryEntry, UpdateBackupSettingsDTO } from '@shared/types/backup.types'
+import type {
+  BackupAccountStatus,
+  BackupHistoryEntry,
+  UpdateBackupSettingsDTO
+} from '@shared/types/backup.types'
 import type { BackupResult, BackupInfo } from '@shared/types/common.types'
 
 /** Nombre de sauvegardes conservées sur Google Drive — les plus anciennes sont supprimées automatiquement. */
@@ -25,8 +29,13 @@ const MAX_BACKUPS_RETAINED = 7
 /** Fréquence de vérification du planificateur de sauvegarde automatique. */
 const SCHEDULER_CHECK_INTERVAL_MS = 15 * 60 * 1000
 
-function toHistoryEntry(row: typeof backupHistory.$inferSelect): BackupHistoryEntry {
-  return { id: row.id, fileName: row.fileName, sizeBytes: row.sizeBytes, createdAt: row.createdAt }
+function toHistoryEntry(file: DriveBackupFile): BackupHistoryEntry {
+  return {
+    id: file.driveFileId,
+    fileName: file.fileName,
+    sizeBytes: file.sizeBytes,
+    createdAt: file.createdAt
+  }
 }
 
 function formatBytes(bytes: number): string {
@@ -47,14 +56,24 @@ export function updateBackupSettings(data: UpdateBackupSettingsDTO): BackupAccou
   return backupConfigService.updateBackupSettings(data)
 }
 
-export function listBackups(): BackupHistoryEntry[] {
-  const db = getDb()
-  return db.select().from(backupHistory).orderBy(desc(backupHistory.createdAt)).all().map(toHistoryEntry)
+/**
+ * Source unique de vérité de l'historique des sauvegardes : Google Drive.
+ * On ne lit plus jamais de table locale ici — après suppression de la base
+ * locale, les sauvegardes déjà envoyées restent donc visibles et
+ * restaurables tant qu'elles existent sur Drive.
+ */
+export async function listBackups(): Promise<BackupHistoryEntry[]> {
+  const drive = getDriveClient()
+  const folderId = await ensureBackupFolder(drive)
+  const files = await listBackupFiles(drive, folderId)
+  return files.map(toHistoryEntry)
 }
 
-export function getLastBackup(): BackupInfo | null {
-  const [latest] = listBackups()
-  return latest ? { fileName: latest.fileName, createdAt: latest.createdAt, sizeBytes: latest.sizeBytes } : null
+export async function getLastBackup(): Promise<BackupInfo | null> {
+  const [latest] = await listBackups()
+  return latest
+    ? { fileName: latest.fileName, createdAt: latest.createdAt, sizeBytes: latest.sizeBytes }
+    : null
 }
 
 // ---------------------------------------------------------------------------
@@ -77,25 +96,29 @@ export function disconnectGoogleAccount(): BackupAccountStatus {
 // ---------------------------------------------------------------------------
 
 /**
- * Purge les sauvegardes excédant `MAX_BACKUPS_RETAINED`, du côté Google
- * Drive et de l'historique local. Les échecs de suppression individuels
- * (fichier déjà supprimé manuellement...) sont journalisés mais
- * n'interrompent pas la rotation.
+ * Purge les sauvegardes excédant `MAX_BACKUPS_RETAINED` sur Google Drive.
+ * La liste de référence est celle de Drive (pas un historique local
+ * potentiellement désynchronisé) — voir plan de correction, étape 3. Les
+ * échecs de suppression individuels (fichier déjà supprimé manuellement...)
+ * sont journalisés mais n'interrompent pas la rotation des autres fichiers.
  */
-async function rotateOldBackups(): Promise<void> {
-  const db = getDb()
-  const rows = db.select().from(backupHistory).orderBy(desc(backupHistory.createdAt)).all()
-  const toDelete = rows.slice(MAX_BACKUPS_RETAINED)
+async function rotateOldBackups(
+  drive: ReturnType<typeof getDriveClient>,
+  folderId: string
+): Promise<void> {
+  const files = await listBackupFiles(drive, folderId)
+  const toDelete = files.slice(MAX_BACKUPS_RETAINED)
   if (toDelete.length === 0) return
 
-  const drive = getDriveClient()
-  for (const row of toDelete) {
+  for (const file of toDelete) {
     try {
-      await deleteBackupFile(drive, row.driveFileId)
+      await deleteBackupFile(drive, file.driveFileId)
     } catch (error) {
-      console.warn(`[backup] Échec de la suppression distante de ${row.fileName} (ignoré) :`, error)
+      console.warn(
+        `[backup] Échec de la suppression distante de ${file.fileName} (ignoré) :`,
+        error
+      )
     }
-    db.delete(backupHistory).where(eq(backupHistory.id, row.id)).run()
   }
 }
 
@@ -114,14 +137,9 @@ export async function exportToCloud(): Promise<BackupResult> {
     const dbBuffer = gzipSync(readFileSync(getDatabasePath()))
 
     const fileName = `academyflow_${format(new Date(), 'yyyy-MM-dd_HHmmss')}.db.gz`
-    const { driveFileId } = await uploadBackupFile(drive, folderId, fileName, dbBuffer)
+    await uploadBackupFile(drive, folderId, fileName, dbBuffer)
 
-    const db = getDb()
-    db.insert(backupHistory)
-      .values({ driveFileId, fileName, sizeBytes: dbBuffer.length })
-      .run()
-
-    await rotateOldBackups()
+    await rotateOldBackups(drive, folderId)
 
     const message = `Sauvegarde envoyée (${formatBytes(dbBuffer.length)}).`
     backupConfigService.recordBackupResult('success', message)
@@ -151,14 +169,22 @@ export async function exportToCloud(): Promise<BackupResult> {
  */
 export async function restoreFromCloud(backupId: string): Promise<BackupResult> {
   try {
-    const db = getDb()
-    const target = db.select().from(backupHistory).where(eq(backupHistory.id, backupId)).get()
-    if (!target) {
-      throw new Error('Sauvegarde introuvable.')
-    }
-
+    // `backupId` est directement l'ID du fichier Google Drive (voir
+    // `BackupHistoryEntry.id`) — plus de table locale à interroger au
+    // préalable, Drive est la seule source de vérité.
     const drive = getDriveClient()
-    const gzipped = await downloadBackupFile(drive, target.driveFileId)
+    let gzipped: Buffer
+    try {
+      gzipped = await downloadBackupFile(drive, backupId)
+    } catch (error) {
+      const status =
+        (error as { code?: number; status?: number })?.code ??
+        (error as { status?: number })?.status
+      if (status === 404) {
+        throw new Error("Cette sauvegarde n'existe plus sur Google Drive.")
+      }
+      throw error
+    }
     const restoredDb = gunzipSync(gzipped)
 
     const dbPath = getDatabasePath()
@@ -180,7 +206,7 @@ export async function restoreFromCloud(backupId: string): Promise<BackupResult> 
       app.exit(0)
     }, 800)
 
-    return { success: true, fileName: target.fileName }
+    return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Échec de la restauration.'
     return { success: false, message }
@@ -194,7 +220,11 @@ export async function restoreFromCloud(backupId: string): Promise<BackupResult> 
 let schedulerHandle: NodeJS.Timeout | null = null
 
 function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
 }
 
 async function runAutoBackupIfDue(): Promise<void> {
@@ -213,7 +243,9 @@ async function runAutoBackupIfDue(): Promise<void> {
 export function initAutoBackupScheduler(): void {
   if (schedulerHandle) return
   schedulerHandle = setInterval(() => {
-    runAutoBackupIfDue().catch((error) => console.error('[backup] Échec de la sauvegarde automatique :', error))
+    runAutoBackupIfDue().catch((error) =>
+      console.error('[backup] Échec de la sauvegarde automatique :', error)
+    )
   }, SCHEDULER_CHECK_INTERVAL_MS)
 }
 

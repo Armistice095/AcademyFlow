@@ -26,20 +26,27 @@ import type {
 import type {
   ArrearsStudent,
   CashboxStats,
-  CashReport,
+  CashReportV2,
   CreateTransactionDTO,
   JournalFilters,
   JournalTransaction,
   Receipt,
+  ReportByCashierRow,
+  ReportByClassRow,
+  ReportFilters,
   Transaction,
-  TuitionAccount
+  TransactionType,
+  TuitionAccount,
+  TypeReport
 } from '@shared/types/transaction.types'
 import type {
   CreateEmployeeDTO,
   Employee,
+  GrantSalaryAdvanceDTO,
+  SalaryAdvance,
   SalaryHistoryEntry,
   SalaryMonthStatus,
-  SalaryPayment,
+  SalaryPaymentResult,
   UpdateEmployeeDTO
 } from '@shared/types/personnel.types'
 import type {
@@ -52,8 +59,17 @@ import type {
 } from '@shared/types/settings.types'
 import type { DashboardStats } from '@shared/types/dashboard.types'
 import type { PrinterConfig, UpdatePrinterConfigDTO } from '@shared/types/printer.types'
-import type { BackupAccountStatus, BackupHistoryEntry, UpdateBackupSettingsDTO } from '@shared/types/backup.types'
+import type {
+  BackupAccountStatus,
+  BackupHistoryEntry,
+  UpdateBackupSettingsDTO
+} from '@shared/types/backup.types'
 import type { UserAccount, CreateUserDTO, UpdateUserDTO } from '@shared/types/user.types'
+import type {
+  ActivateLicenseDTO,
+  ActivateLicenseResult,
+  LicenseStatus
+} from '@shared/types/license.types'
 
 /**
  * Déclaration de l'API exposée au renderer via `window.api`, organisée par
@@ -99,7 +115,14 @@ export interface AcademyFlowAPI {
     getJournal: (filters: JournalFilters) => Promise<PaginatedResult<JournalTransaction>>
     getStudentAccount: (studentId: string) => Promise<TuitionAccount>
     listArrears: () => Promise<ArrearsStudent[]>
-    getReport: (from: string, to: string) => Promise<CashReport>
+    getReportV2: (filters: ReportFilters) => Promise<CashReportV2>
+    getTypeReport: (filters: ReportFilters, type: TransactionType) => Promise<TypeReport>
+    getReportByClass: (
+      filters: Pick<ReportFilters, 'from' | 'to' | 'category' | 'userId'>
+    ) => Promise<ReportByClassRow[]>
+    getReportByCashier: (
+      filters: Pick<ReportFilters, 'from' | 'to' | 'classId' | 'category'>
+    ) => Promise<ReportByCashierRow[]>
     getReceipt: (transactionId: string) => Promise<Receipt | null>
     reprintReceipt: (transactionId: string) => Promise<Receipt>
     getBalance: (schoolYearId?: string) => Promise<number>
@@ -112,9 +135,17 @@ export interface AcademyFlowAPI {
     delete: (id: string) => Promise<void>
     list: () => Promise<Employee[]>
     getById: (id: string) => Promise<Employee | null>
-    markSalaryPaid: (employeeId: string, month: number, year: number) => Promise<SalaryPayment>
+    markSalaryPaid: (
+      employeeId: string,
+      month: number,
+      year: number
+    ) => Promise<SalaryPaymentResult>
     getSalaryStatus: (month: number, year: number) => Promise<SalaryMonthStatus[]>
     getSalaryHistory: (employeeId: string) => Promise<SalaryHistoryEntry[]>
+    grantAdvance: (data: GrantSalaryAdvanceDTO) => Promise<SalaryAdvance>
+    cancelAdvance: (id: string) => Promise<void>
+    listAdvances: (employeeId: string) => Promise<SalaryAdvance[]>
+    getPendingAdvance: (employeeId: string) => Promise<SalaryAdvance | null>
   }
 
   settings: {
@@ -123,6 +154,9 @@ export interface AcademyFlowAPI {
     createSchoolYear: (label: string) => Promise<SchoolYear>
     setCurrentSchoolYear: (yearId: string) => Promise<SchoolYear>
     getClasses: () => Promise<SchoolClass[]>
+    createClass: (name: string) => Promise<SchoolClass>
+    updateClass: (id: string, name: string) => Promise<SchoolClass>
+    deleteClass: (id: string) => Promise<void>
     getTuitionSchedule: (classId: string, yearId: string) => Promise<TuitionSchedule | null>
     saveTuitionSchedule: (data: SaveTuitionScheduleDTO) => Promise<TuitionSchedule>
     getSchoolInfo: () => Promise<SchoolInfo>
@@ -146,6 +180,7 @@ export interface AcademyFlowAPI {
     printReceipt: (receiptId: string) => Promise<PrintResult>
     testConnection: () => Promise<PrinterStatus>
     openPdf: (base64: string, fileName: string) => Promise<void>
+    openFile: (base64: string, fileName: string) => Promise<void>
     getConfig: () => Promise<PrinterConfig>
     updateConfig: (data: UpdatePrinterConfigDTO) => Promise<PrinterConfig>
     getStatus: () => Promise<PrinterStatus>
@@ -164,5 +199,12 @@ export interface AcademyFlowAPI {
 
   dashboard: {
     getStats: () => Promise<DashboardStats>
+  }
+
+  license: {
+    getStatus: () => Promise<LicenseStatus>
+    activate: (dto: ActivateLicenseDTO) => Promise<ActivateLicenseResult>
+    resync: () => Promise<LicenseStatus>
+    markOnboardingCompleted: () => Promise<LicenseStatus>
   }
 }

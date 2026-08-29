@@ -25,13 +25,13 @@ export function SchoolCertPDF({
         <Text style={pdfStyles.title}>Certificat de scolarité</Text>
 
         <Text style={pdfStyles.paragraph}>
-          Je soussigné(e), Directeur/Directrice de {schoolInfo.name || "l'établissement"}, certifie que
-          l'élève désigné(e) ci-dessous est régulièrement scolarisé(e) dans notre établissement au titre
-          de l'année scolaire {schoolYearLabel}, en classe de {className}.
+          Je soussigné(e), Directeur/Directrice de {schoolInfo.name || "l'établissement"}, certifie
+          que l’élève désigné(e) ci-dessous est régulièrement scolarisé(e) dans notre établissement
+          au titre de l’année scolaire {schoolYearLabel}, en classe de {className}.
         </Text>
 
         <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Identité de l'élève</Text>
+          <Text style={pdfStyles.sectionTitle}>Identité de l’élève</Text>
           <View style={pdfStyles.row}>
             <Text style={pdfStyles.label}>Matricule</Text>
             <Text style={pdfStyles.value}>{student.matricule}</Text>
@@ -57,7 +57,8 @@ export function SchoolCertPDF({
         </View>
 
         <Text style={pdfStyles.paragraph}>
-          Ce certificat est délivré à la demande de l'intéressé(e) pour servir et valoir ce que de droit.
+          Ce certificat est délivré à la demande de l’intéressé(e) pour servir et valoir ce que de
+          droit.
         </Text>
 
         <SignatureBlock schoolInfo={schoolInfo} />

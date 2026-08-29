@@ -16,6 +16,8 @@ export interface CreateUserDTO {
   username: string
   password: string
   fullName: string
+  /** Réservé à l'onboarding — voir `CreateUserInput` dans auth.service.ts. */
+  skipMustChangePassword?: boolean
 }
 
 export interface UpdateUserDTO {

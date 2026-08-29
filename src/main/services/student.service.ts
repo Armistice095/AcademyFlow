@@ -1,4 +1,4 @@
-import { and, eq, like, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, like, or, sql } from 'drizzle-orm'
 import { getDb } from '@main/database'
 import {
   classes,
@@ -21,6 +21,7 @@ import type {
   PromoteStudentsDTO,
   PromotionResult,
   Student,
+  StudentHistoryStatus,
   StudentListItem,
   StudentSearchQuery,
   StudentStats,
@@ -56,9 +57,15 @@ function getGuardiansForStudent(studentId: string): Guardian[] {
 
 function requireCurrentSchoolYearId(): string {
   const db = getDb()
-  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(eq(schoolYears.isCurrent, true)).get()
+  const year = db
+    .select({ id: schoolYears.id })
+    .from(schoolYears)
+    .where(eq(schoolYears.isCurrent, true))
+    .get()
   if (!year) {
-    throw new Error("Aucune année scolaire active. Configurez-en une dans Paramètres avant d'inscrire un élève.")
+    throw new Error(
+      "Aucune année scolaire active. Configurez-en une dans Paramètres avant d'inscrire un élève."
+    )
   }
   return year.id
 }
@@ -76,7 +83,6 @@ function toStudent(row: typeof students.$inferSelect): Student {
     nationality: row.nationality,
     address: row.address,
     previousSchool: row.previousSchool,
-    status: row.status as Student['status'],
     isActive: row.isActive,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -85,11 +91,122 @@ function toStudent(row: typeof students.$inferSelect): Student {
 }
 
 // ---------------------------------------------------------------------------
+// Statut d'historique (nouveau/ancien) — TOUJOURS calculé, jamais stocké
+// ---------------------------------------------------------------------------
+
+/**
+ * Détermine si l'inscription de `studentId` pour `schoolYearId` est sa toute
+ * première inscription (BR-003 : une seule inscription par élève et par
+ * année, donc les années scolaires triées par libellé donnent un ordre
+ * chronologique fiable). `nouveau` si c'est la première, `ancien` sinon —
+ * y compris si l'élève n'a aucune inscription pour cette année précise
+ * (on regarde alors sa position parmi ses inscriptions existantes).
+ *
+ * Fonction volontairement partagée : réutilisée pour les KPI (`getStats`),
+ * les badges d'affichage, et destinée à être réutilisée par
+ * `tuition.service.ts` pour appliquer un barème différencié nouveau/ancien.
+ */
+export function getEnrollmentHistoryStatus(
+  studentId: string,
+  schoolYearId: string
+): StudentHistoryStatus {
+  const db = getDb()
+
+  const studentEnrollments = db
+    .select({ schoolYearId: enrollments.schoolYearId, label: schoolYears.label })
+    .from(enrollments)
+    .innerJoin(schoolYears, eq(schoolYears.id, enrollments.schoolYearId))
+    .where(eq(enrollments.studentId, studentId))
+    .orderBy(schoolYears.label)
+    .all()
+
+  if (studentEnrollments.length === 0) return 'nouveau'
+
+  const targetIndex = studentEnrollments.findIndex((e) => e.schoolYearId === schoolYearId)
+  // Si l'année demandée n'a pas encore d'inscription (ex: avant création),
+  // on compare sa position chronologique parmi les années déjà inscrites.
+  if (targetIndex === -1) {
+    const targetLabel = db
+      .select({ label: schoolYears.label })
+      .from(schoolYears)
+      .where(eq(schoolYears.id, schoolYearId))
+      .get()
+    if (!targetLabel) return 'nouveau'
+    return studentEnrollments.some((e) => e.label < targetLabel.label) ? 'ancien' : 'nouveau'
+  }
+
+  return targetIndex === 0 ? 'nouveau' : 'ancien'
+}
+
+/**
+ * Statut d'historique "global" d'un élève (fiche détail) : `ancien` dès
+ * qu'il a plus d'une inscription au total, `nouveau` s'il n'en a encore
+ * qu'une (ou aucune). Contrairement à `getEnrollmentHistoryStatus`, ne
+ * dépend pas d'une année scolaire précise.
+ */
+function getOverallHistoryStatus(studentId: string): StudentHistoryStatus {
+  const db = getDb()
+  const count = db
+    .select({ count: sql<number>`count(*)` })
+    .from(enrollments)
+    .where(eq(enrollments.studentId, studentId))
+    .get()
+  return (count?.count ?? 0) > 1 ? 'ancien' : 'nouveau'
+}
+
+/**
+ * Variante en lot de `getEnrollmentHistoryStatus`, pour les listes/stats —
+ * une seule requête au lieu d'une par élève. Calcule, pour chaque élève
+ * fourni, si sa première inscription jamais enregistrée correspond à
+ * `schoolYearId` (nouveau) ou non (ancien).
+ */
+function batchGetEnrollmentHistoryStatus(
+  studentIds: string[],
+  schoolYearId: string
+): Map<string, StudentHistoryStatus> {
+  const db = getDb()
+  const result = new Map<string, StudentHistoryStatus>()
+  if (studentIds.length === 0) return result
+
+  const rows = db
+    .select({ studentId: enrollments.studentId, label: schoolYears.label })
+    .from(enrollments)
+    .innerJoin(schoolYears, eq(schoolYears.id, enrollments.schoolYearId))
+    .where(inArray(enrollments.studentId, studentIds))
+    .all()
+
+  const firstLabelByStudent = new Map<string, string>()
+  for (const row of rows) {
+    const current = firstLabelByStudent.get(row.studentId)
+    if (!current || row.label < current) firstLabelByStudent.set(row.studentId, row.label)
+  }
+
+  const targetYear = db
+    .select({ label: schoolYears.label })
+    .from(schoolYears)
+    .where(eq(schoolYears.id, schoolYearId))
+    .get()
+
+  for (const studentId of studentIds) {
+    const firstLabel = firstLabelByStudent.get(studentId)
+    result.set(
+      studentId,
+      !firstLabel || firstLabel >= (targetYear?.label ?? '') ? 'nouveau' : 'ancien'
+    )
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
 // Détection de doublons (Parcours 1, scénario d'erreur)
 // ---------------------------------------------------------------------------
 
 /** Recherche un élève existant portant le même nom/prénom, déjà inscrit pour l'année donnée. */
-export function checkDuplicate(firstName: string, lastName: string, schoolYearId: string): Student | null {
+export function checkDuplicate(
+  firstName: string,
+  lastName: string,
+  schoolYearId: string
+): Student | null {
   const db = getDb()
 
   const match = db
@@ -134,15 +251,17 @@ export function create(data: CreateStudentInput): Student {
     )
   }
 
-  const targetClass = db.select({ id: classes.id }).from(classes).where(eq(classes.id, data.classId)).get()
+  const targetClass = db
+    .select({ id: classes.id })
+    .from(classes)
+    .where(eq(classes.id, data.classId))
+    .get()
   if (!targetClass) {
     throw new Error('Classe introuvable.')
   }
 
   const studentId = generateId()
   const matricule = generateMatricule()
-  const status = data.status ?? 'nouveau'
-  const enrollmentStatus = status === 'redoublant' ? 'redoublant' : 'admis'
 
   db.transaction((tx) => {
     tx.insert(students)
@@ -158,7 +277,6 @@ export function create(data: CreateStudentInput): Student {
         nationality: data.nationality ?? 'Béninoise',
         address: data.address ?? null,
         previousSchool: data.previousSchool ?? null,
-        status,
         createdBy: data.createdBy
       })
       .run()
@@ -183,12 +301,20 @@ export function create(data: CreateStudentInput): Student {
         studentId,
         schoolYearId,
         classId: data.classId,
-        status: enrollmentStatus
+        // Un élève créé pour la première fois est toujours 'admis' — le
+        // redoublement est une décision de passage de classe (F-004/F-005),
+        // qui ne peut concerner qu'une inscription *suivante*.
+        status: 'admis'
       })
       .run()
   })
 
-  logAction({ userId: data.createdBy, action: 'create', entityType: 'student', entityId: studentId })
+  logAction({
+    userId: data.createdBy,
+    action: 'create',
+    entityType: 'student',
+    entityId: studentId
+  })
 
   const created = findById(studentId)
   if (!created) throw new Error("Échec de la récupération de l'élève après création.")
@@ -251,7 +377,11 @@ export function findById(id: string): Student | null {
   const row = db.select().from(students).where(eq(students.id, id)).get()
   if (!row) return null
 
-  return { ...toStudent(row), guardians: getGuardiansForStudent(id) }
+  return {
+    ...toStudent(row),
+    guardians: getGuardiansForStudent(id),
+    historyStatus: getOverallHistoryStatus(id)
+  }
 }
 
 /**
@@ -316,7 +446,11 @@ export function search(query: StudentSearchQuery): PaginatedResult<StudentListIt
   if (query.query && query.query.trim()) {
     const term = `%${query.query.trim()}%`
     conditions.push(
-      or(like(students.lastName, term), like(students.firstName, term), like(students.matricule, term))!
+      or(
+        like(students.lastName, term),
+        like(students.firstName, term),
+        like(students.matricule, term)
+      )!
     )
   }
 
@@ -324,7 +458,11 @@ export function search(query: StudentSearchQuery): PaginatedResult<StudentListIt
   let classNameByStudentId: Map<string, string> | null = null
   if (query.schoolYearId) {
     const enrollmentRows = db
-      .select({ studentId: enrollments.studentId, classId: enrollments.classId, className: classes.name })
+      .select({
+        studentId: enrollments.studentId,
+        classId: enrollments.classId,
+        className: classes.name
+      })
       .from(enrollments)
       .innerJoin(classes, eq(classes.id, enrollments.classId))
       .where(eq(enrollments.schoolYearId, query.schoolYearId))
@@ -354,10 +492,21 @@ export function search(query: StudentSearchQuery): PaginatedResult<StudentListIt
   const total = rows.length
   const paged = rows.slice((page - 1) * pageSize, page * pageSize)
 
+  // historyStatus n'a de sens que rapporté à une année scolaire précise ;
+  // sans `schoolYearId` (ex: recherche de réinscription toutes années
+  // confondues), on ne peut pas le calculer de façon non ambiguë.
+  const historyStatusById = query.schoolYearId
+    ? batchGetEnrollmentHistoryStatus(
+        paged.map((r) => r.id),
+        query.schoolYearId
+      )
+    : null
+
   return {
     items: paged.map((row) => ({
       ...toStudent(row),
-      className: classNameByStudentId?.get(row.id) ?? null
+      className: classNameByStudentId?.get(row.id) ?? null,
+      historyStatus: historyStatusById?.get(row.id)
     })),
     total,
     page,
@@ -371,7 +520,11 @@ export function search(query: StudentSearchQuery): PaginatedResult<StudentListIt
 
 function getCurrentSchoolYearIdOrNull(): string | null {
   const db = getDb()
-  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(eq(schoolYears.isCurrent, true)).get()
+  const year = db
+    .select({ id: schoolYears.id })
+    .from(schoolYears)
+    .where(eq(schoolYears.isCurrent, true))
+    .get()
   return year?.id ?? null
 }
 
@@ -406,17 +559,22 @@ function countStudents(schoolYearId: string, classId?: string): StudentCounts {
   if (classId) conditions.push(eq(enrollments.classId, classId))
 
   const rows = db
-    .select({ status: students.status, gender: students.gender })
+    .select({ studentId: students.id, gender: students.gender })
     .from(enrollments)
     .innerJoin(students, eq(students.id, enrollments.studentId))
     .where(and(...conditions))
     .all()
 
+  const historyStatusById = batchGetEnrollmentHistoryStatus(
+    rows.map((r) => r.studentId),
+    schoolYearId
+  )
+
   let nouveaux = 0
   let male = 0
   let female = 0
   for (const row of rows) {
-    if (row.status === 'nouveau') nouveaux += 1
+    if (historyStatusById.get(row.studentId) === 'nouveau') nouveaux += 1
     if (row.gender === 'M') male += 1
     else if (row.gender === 'F') female += 1
   }
@@ -433,7 +591,9 @@ export function getStats(query: StudentStatsQuery = {}): StudentStats {
   const schoolYearId = query.schoolYearId ?? getCurrentSchoolYearIdOrNull()
   const current = schoolYearId ? countStudents(schoolYearId, query.classId) : EMPTY_COUNTS
   const previousSchoolYearId = schoolYearId ? getPreviousSchoolYearId(schoolYearId) : null
-  const previous = previousSchoolYearId ? countStudents(previousSchoolYearId, query.classId) : EMPTY_COUNTS
+  const previous = previousSchoolYearId
+    ? countStudents(previousSchoolYearId, query.classId)
+    : EMPTY_COUNTS
 
   const trend = (curr: number, prev: number): StudentStatsTrend => ({
     current: curr,
@@ -445,8 +605,14 @@ export function getStats(query: StudentStatsQuery = {}): StudentStats {
     total: trend(current.total, previous.total),
     anciens: trend(current.anciens, previous.anciens),
     nouveaux: trend(current.nouveaux, previous.nouveaux),
-    male: { count: current.male, percentage: current.total > 0 ? (current.male / current.total) * 100 : 0 },
-    female: { count: current.female, percentage: current.total > 0 ? (current.female / current.total) * 100 : 0 }
+    male: {
+      count: current.male,
+      percentage: current.total > 0 ? (current.male / current.total) * 100 : 0
+    },
+    female: {
+      count: current.female,
+      percentage: current.total > 0 ? (current.female / current.total) * 100 : 0
+    }
   }
 }
 
@@ -459,12 +625,24 @@ export function listByClass(classId: string, schoolYearId: string): Student[] {
     .from(enrollments)
     .innerJoin(students, eq(students.id, enrollments.studentId))
     .where(
-      and(eq(enrollments.classId, classId), eq(enrollments.schoolYearId, schoolYearId), eq(students.isActive, true))
+      and(
+        eq(enrollments.classId, classId),
+        eq(enrollments.schoolYearId, schoolYearId),
+        eq(students.isActive, true)
+      )
     )
     .orderBy(students.lastName, students.firstName)
     .all()
 
-  return rows.map(({ student: row }) => toStudent(row))
+  const historyStatusById = batchGetEnrollmentHistoryStatus(
+    rows.map((r) => r.student.id),
+    schoolYearId
+  )
+
+  return rows.map(({ student: row }) => ({
+    ...toStudent(row),
+    historyStatus: historyStatusById.get(row.id)
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +653,11 @@ export function getHistory(studentId: string): EnrollmentWithDetails[] {
   const db = getDb()
 
   const rows = db
-    .select({ enrollment: enrollments, className: classes.name, schoolYearLabel: schoolYears.label })
+    .select({
+      enrollment: enrollments,
+      className: classes.name,
+      schoolYearLabel: schoolYears.label
+    })
     .from(enrollments)
     .innerJoin(classes, eq(classes.id, enrollments.classId))
     .innerJoin(schoolYears, eq(schoolYears.id, enrollments.schoolYearId))
@@ -498,7 +680,12 @@ export function createEnrollment(data: CreateEnrollmentDTO): Enrollment {
   const existing = db
     .select({ id: enrollments.id })
     .from(enrollments)
-    .where(and(eq(enrollments.studentId, data.studentId), eq(enrollments.schoolYearId, data.schoolYearId)))
+    .where(
+      and(
+        eq(enrollments.studentId, data.studentId),
+        eq(enrollments.schoolYearId, data.schoolYearId)
+      )
+    )
     .get()
   if (existing) {
     throw new Error('BR-003 : cet élève a déjà un statut de progression pour cette année scolaire.')
@@ -548,18 +735,26 @@ export function promoteStudents(data: PromoteStudentsDTO): PromotionResult {
         .select()
         .from(enrollments)
         .where(
-          and(eq(enrollments.studentId, decision.studentId), eq(enrollments.schoolYearId, data.sourceSchoolYearId))
+          and(
+            eq(enrollments.studentId, decision.studentId),
+            eq(enrollments.schoolYearId, data.sourceSchoolYearId)
+          )
         )
         .get()
       if (!sourceEnrollment) {
-        throw new Error(`Élève ${decision.studentId} : aucune inscription trouvée pour l'année source.`)
+        throw new Error(
+          `Élève ${decision.studentId} : aucune inscription trouvée pour l'année source.`
+        )
       }
 
       const alreadyEnrolled = tx
         .select({ id: enrollments.id })
         .from(enrollments)
         .where(
-          and(eq(enrollments.studentId, decision.studentId), eq(enrollments.schoolYearId, data.targetSchoolYearId))
+          and(
+            eq(enrollments.studentId, decision.studentId),
+            eq(enrollments.schoolYearId, data.targetSchoolYearId)
+          )
         )
         .get()
       if (alreadyEnrolled) {
@@ -573,7 +768,9 @@ export function promoteStudents(data: PromoteStudentsDTO): PromotionResult {
         const currentIndex = allClasses.findIndex((c) => c.id === sourceEnrollment.classId)
         const nextClass = currentIndex >= 0 ? allClasses[currentIndex + 1] : undefined
         if (!nextClass) {
-          throw new Error(`Élève ${decision.studentId} : pas de classe supérieure disponible (fin de cursus).`)
+          throw new Error(
+            `Élève ${decision.studentId} : pas de classe supérieure disponible (fin de cursus).`
+          )
         }
         targetClassId = nextClass.id
         promoted += 1

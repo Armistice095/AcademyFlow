@@ -48,7 +48,10 @@ export function UsersSettingsPage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false)
 
   const [userToToggle, setUserToToggle] = useState<UserAccount | null>(null)
-  const [temporaryPassword, setTemporaryPassword] = useState<{ user: UserAccount; password: string } | null>(null)
+  const [temporaryPassword, setTemporaryPassword] = useState<{
+    user: UserAccount
+    password: string
+  } | null>(null)
 
   const loadUsers = async (): Promise<void> => {
     const [list, me] = await Promise.all([api.auth.listUsers(), api.auth.getCurrentUser()])
@@ -60,7 +63,11 @@ export function UsersSettingsPage(): JSX.Element {
     setIsLoading(true)
     loadUsers()
       .catch(() =>
-        toast({ title: 'Échec du chargement', description: 'Impossible de charger les comptes utilisateurs.', variant: 'destructive' })
+        toast({
+          title: 'Échec du chargement',
+          description: 'Impossible de charger les comptes utilisateurs.',
+          variant: 'destructive'
+        })
       )
       .finally(() => setIsLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,7 +92,7 @@ export function UsersSettingsPage(): JSX.Element {
     setFormError(null)
 
     if (!form.fullName.trim() || !form.username.trim()) {
-      setFormError('Le nom complet et le nom d\'utilisateur sont requis.')
+      setFormError("Le nom complet et le nom d'utilisateur sont requis.")
       return
     }
     if (!editingUser && form.password.length < 6) {
@@ -107,7 +114,10 @@ export function UsersSettingsPage(): JSX.Element {
           fullName: form.fullName.trim(),
           password: form.password
         })
-        toast({ title: 'Compte créé', description: `${form.fullName} peut désormais se connecter.` })
+        toast({
+          title: 'Compte créé',
+          description: `${form.fullName} peut désormais se connecter.`
+        })
       }
       setFormOpen(false)
       await loadUsers()
@@ -129,7 +139,7 @@ export function UsersSettingsPage(): JSX.Element {
       await loadUsers()
     } catch (err) {
       toast({
-        title: 'Échec de l\'opération',
+        title: "Échec de l'opération",
         description: err instanceof Error ? err.message : 'Erreur inattendue.',
         variant: 'destructive'
       })
@@ -204,7 +214,6 @@ export function UsersSettingsPage(): JSX.Element {
         }
       }
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentUser]
   )
 
@@ -234,7 +243,9 @@ export function UsersSettingsPage(): JSX.Element {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingUser ? 'Modifier le compte' : 'Nouveau compte utilisateur'}</DialogTitle>
+            <DialogTitle>
+              {editingUser ? 'Modifier le compte' : 'Nouveau compte utilisateur'}
+            </DialogTitle>
             <DialogDescription>
               {editingUser
                 ? "Modifiez le nom ou l'identifiant de connexion de ce compte."
@@ -278,7 +289,12 @@ export function UsersSettingsPage(): JSX.Element {
             {formError && <p className="text-sm font-medium text-destructive">{formError}</p>}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setFormOpen(false)} disabled={submitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFormOpen(false)}
+                disabled={submitting}
+              >
                 Annuler
               </Button>
               <Button type="submit" disabled={submitting}>
@@ -303,13 +319,17 @@ export function UsersSettingsPage(): JSX.Element {
         onConfirm={handleToggleActive}
       />
 
-      <Dialog open={temporaryPassword !== null} onOpenChange={(open) => !open && setTemporaryPassword(null)}>
+      <Dialog
+        open={temporaryPassword !== null}
+        onOpenChange={(open) => !open && setTemporaryPassword(null)}
+      >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Mot de passe réinitialisé</DialogTitle>
             <DialogDescription>
-              Communiquez ce mot de passe temporaire à {temporaryPassword?.user.fullName}. Il devra le changer dès sa
-              prochaine connexion. Il ne sera plus affiché après la fermeture de cette fenêtre.
+              Communiquez ce mot de passe temporaire à {temporaryPassword?.user.fullName}. Il devra
+              le changer dès sa prochaine connexion. Il ne sera plus affiché après la fermeture de
+              cette fenêtre.
             </DialogDescription>
           </DialogHeader>
           <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-center font-mono text-lg tracking-wider">

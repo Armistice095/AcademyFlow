@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, Upload, User } from 'lucide-react'
+import { Eye, FileDown, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +20,7 @@ import {
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
 import { DataTable } from '@renderer/components/data-table/DataTable'
 import { DataTableToolbar } from '@renderer/components/data-table/DataTableToolbar'
+import { StudentAvatar } from '@renderer/components/students/StudentAvatar'
 import { StudentStatsCards } from './components/StudentStatsCards'
 import { useStudents, useStudentStats } from '@renderer/hooks/useStudents'
 import { useSettingsStore } from '@renderer/stores/settings.store'
@@ -27,7 +34,7 @@ import type { StudentListItem } from '@shared/types/student.types'
 
 const STATUS_LABELS: Record<string, string> = {
   nouveau: 'Nouveau',
-  redoublant: 'Redoublant'
+  ancien: 'Ancien'
 }
 
 export function StudentsListPage(): JSX.Element {
@@ -46,7 +53,7 @@ export function StudentsListPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { query, setQuery, results, isLoading } = useStudents({
+  const { query, setQuery, results, isLoading, pagination, setPagination } = useStudents({
     classId: classId === 'all' ? undefined : classId,
     schoolYearId: currentSchoolYear?.id
   })
@@ -61,18 +68,13 @@ export function StudentsListPage(): JSX.Element {
       {
         id: 'photo',
         header: 'Photo',
-        cell: ({ row }) =>
-          row.original.photoPath ? (
-            <img
-              src={row.original.photoPath}
-              alt=""
-              className="h-9 w-9 rounded-full border border-border object-cover"
-            />
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-input bg-muted">
-              <User className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )
+        cell: ({ row }) => (
+          <StudentAvatar
+            firstName={row.original.firstName}
+            lastName={row.original.lastName}
+            photoPath={row.original.photoPath}
+          />
+        )
       },
       {
         id: 'name',
@@ -95,7 +97,8 @@ export function StudentsListPage(): JSX.Element {
       {
         accessorKey: 'dateOfBirth',
         header: 'Date de naissance',
-        cell: ({ row }) => (row.original.dateOfBirth ? formatDateShort(row.original.dateOfBirth) : '—')
+        cell: ({ row }) =>
+          row.original.dateOfBirth ? formatDateShort(row.original.dateOfBirth) : '—'
       },
       {
         id: 'placeOfBirth',
@@ -108,11 +111,17 @@ export function StudentsListPage(): JSX.Element {
         accessorFn: (row) => row.className ?? '—'
       },
       {
-        accessorKey: 'status',
+        accessorKey: 'historyStatus',
         header: 'Statut',
-        cell: ({ row }) => (
-          <Badge variant="secondary">{STATUS_LABELS[row.original.status] ?? row.original.status}</Badge>
-        )
+        cell: ({ row }) => {
+          const status = row.original.historyStatus
+          if (!status) return <span className="text-muted-foreground">—</span>
+          return (
+            <Badge variant={status === 'nouveau' ? 'success' : 'outline'}>
+              {STATUS_LABELS[status] ?? status}
+            </Badge>
+          )
+        }
       },
       {
         id: 'actions',
@@ -120,7 +129,12 @@ export function StudentsListPage(): JSX.Element {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Actions pour ${row.original.firstName} ${row.original.lastName}`}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -166,14 +180,17 @@ export function StudentsListPage(): JSX.Element {
   }
 
   const handleExportClassList = async (): Promise<void> => {
-    if (classId === 'all' || !currentSchoolYear || !results) return
+    if (classId === 'all' || !currentSchoolYear) return
     setExporting(true)
     try {
-      const schoolInfo = await api.settings.getSchoolInfo()
+      const [schoolInfo, students] = await Promise.all([
+        api.settings.getSchoolInfo(),
+        api.students.listByClass(classId, currentSchoolYear.id)
+      ])
       const className = classes.find((c) => c.id === classId)?.name ?? ''
       await openPdf(
         <ClassListPDF
-          students={results.items}
+          students={students}
           className={className}
           schoolYearLabel={currentSchoolYear.label}
           schoolInfo={schoolInfo}
@@ -181,7 +198,11 @@ export function StudentsListPage(): JSX.Element {
         `liste-${className}.pdf`
       )
     } catch {
-      toast({ title: "Échec de l'export", description: 'Impossible de générer le PDF.', variant: 'destructive' })
+      toast({
+        title: "Échec de l'export",
+        description: 'Impossible de générer le PDF.',
+        variant: 'destructive'
+      })
     } finally {
       setExporting(false)
     }
@@ -216,7 +237,12 @@ export function StudentsListPage(): JSX.Element {
               Importer
             </Button>
             {classId !== 'all' && (
-              <Button variant="outline" onClick={handleExportClassList} disabled={exporting} className="gap-1.5">
+              <Button
+                variant="outline"
+                onClick={handleExportClassList}
+                disabled={exporting}
+                className="gap-1.5"
+              >
                 <FileDown className="h-4 w-4" />
                 {exporting ? 'Export...' : 'Exporter la liste'}
               </Button>
@@ -234,7 +260,13 @@ export function StudentsListPage(): JSX.Element {
         data={results?.items ?? []}
         isLoading={isLoading}
         onRowClick={(row) => navigate(`/students/${row.id}`)}
-        emptyMessage={query ? 'Aucun élève ne correspond à cette recherche.' : 'Aucun élève inscrit.'}
+        emptyMessage={
+          query ? 'Aucun élève ne correspond à cette recherche.' : 'Aucun élève inscrit.'
+        }
+        manualPagination
+        pagination={pagination}
+        onPaginationChange={setPagination}
+        rowCount={results?.total ?? 0}
       />
 
       <ConfirmDialog

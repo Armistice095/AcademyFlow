@@ -40,13 +40,19 @@ export function registerAuthIpcHandlers(): void {
     return authService.createUser(data)
   })
 
-  ipcMain.handle(IPC_CHANNELS.auth.updateUser, async (_event, userId: string, data: UpdateUserDTO) => {
-    return authService.updateUser(userId, data)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.auth.updateUser,
+    async (_event, userId: string, data: UpdateUserDTO) => {
+      return authService.updateUser(userId, data)
+    }
+  )
 
-  ipcMain.handle(IPC_CHANNELS.auth.setUserActive, async (_event, userId: string, isActive: boolean) => {
-    return authService.setUserActive(userId, isActive)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.auth.setUserActive,
+    async (_event, userId: string, isActive: boolean) => {
+      return authService.setUserActive(userId, isActive)
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.auth.resetPassword, async (_event, userId: string) => {
     return authService.resetPassword(userId)

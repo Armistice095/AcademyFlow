@@ -34,11 +34,41 @@ export function BackupSettingsPage(): JSX.Element {
   const [connecting, setConnecting] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<BackupHistoryEntry | null>(null)
+  // L'historique est maintenant lu depuis Google Drive à chaque affichage
+  // (appel réseau) et non plus une table locale instantanée — d'où un état
+  // de chargement et un état d'erreur dédiés, distincts du statut du compte.
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   const refresh = async (): Promise<void> => {
-    const [nextStatus, nextHistory] = await Promise.all([api.backup.getStatus(), api.backup.listBackups()])
-    setStatus(nextStatus)
-    setHistory(nextHistory)
+    setIsLoadingHistory(true)
+    setHistoryError(null)
+    try {
+      const nextStatus = await api.backup.getStatus()
+      setStatus(nextStatus)
+
+      if (!nextStatus.connected) {
+        setHistory([])
+        return
+      }
+
+      try {
+        const nextHistory = await api.backup.listBackups()
+        setHistory(nextHistory)
+      } catch (err) {
+        // Une erreur Drive (jeton expiré, perte réseau...) ne doit pas
+        // laisser croire à un historique vide : le compte reste affiché
+        // comme connecté, mais un message explicite remplace la liste.
+        setHistory([])
+        setHistoryError(
+          err instanceof Error
+            ? err.message
+            : 'Impossible de récupérer les sauvegardes depuis Google Drive.'
+        )
+      }
+    } finally {
+      setIsLoadingHistory(false)
+    }
   }
 
   useEffect(() => {
@@ -59,7 +89,10 @@ export function BackupSettingsPage(): JSX.Element {
     try {
       await api.backup.connectGoogleAccount()
       await refresh()
-      toast({ title: 'Compte Google connecté', description: 'La sauvegarde cloud est prête à être utilisée.' })
+      toast({
+        title: 'Compte Google connecté',
+        description: 'La sauvegarde cloud est prête à être utilisée.'
+      })
     } catch (err) {
       toast({
         title: 'Échec de la connexion',
@@ -72,9 +105,20 @@ export function BackupSettingsPage(): JSX.Element {
   }
 
   const handleDisconnect = async (): Promise<void> => {
-    await api.backup.disconnectGoogleAccount()
-    await refresh()
-    toast({ title: 'Compte déconnecté', description: "La sauvegarde automatique a été désactivée." })
+    try {
+      await api.backup.disconnectGoogleAccount()
+      await refresh()
+      toast({
+        title: 'Compte déconnecté',
+        description: 'La sauvegarde automatique a été désactivée.'
+      })
+    } catch (err) {
+      toast({
+        title: 'Échec de la déconnexion',
+        description: err instanceof Error ? err.message : 'Erreur inattendue.',
+        variant: 'destructive'
+      })
+    }
   }
 
   const handleExportNow = async (): Promise<void> => {
@@ -83,9 +127,16 @@ export function BackupSettingsPage(): JSX.Element {
       const result = await api.backup.exportToCloud()
       await refresh()
       if (result.success) {
-        toast({ title: 'Sauvegarde envoyée', description: result.fileName ?? 'La sauvegarde a été envoyée sur Google Drive.' })
+        toast({
+          title: 'Sauvegarde envoyée',
+          description: result.fileName ?? 'La sauvegarde a été envoyée sur Google Drive.'
+        })
       } else {
-        toast({ title: 'Échec de la sauvegarde', description: result.message, variant: 'destructive' })
+        toast({
+          title: 'Échec de la sauvegarde',
+          description: result.message,
+          variant: 'destructive'
+        })
       }
     } finally {
       setExporting(false)
@@ -104,14 +155,28 @@ export function BackupSettingsPage(): JSX.Element {
 
   const handleRestore = async (): Promise<void> => {
     if (!restoreTarget) return
-    const result = await api.backup.restoreFromCloud(restoreTarget.id)
-    if (result.success) {
+    try {
+      const result = await api.backup.restoreFromCloud(restoreTarget.id)
+      if (result.success) {
+        toast({
+          title: 'Restauration en cours',
+          description: "L'application va redémarrer pour finaliser la restauration."
+        })
+      } else {
+        toast({
+          title: 'Échec de la restauration',
+          description: result.message,
+          variant: 'destructive'
+        })
+      }
+    } catch (err) {
       toast({
-        title: 'Restauration en cours',
-        description: "L'application va redémarrer pour finaliser la restauration."
+        title: 'Échec de la restauration',
+        description: err instanceof Error ? err.message : 'Erreur inattendue.',
+        variant: 'destructive'
       })
-    } else {
-      toast({ title: 'Échec de la restauration', description: result.message, variant: 'destructive' })
+    } finally {
+      setRestoreTarget(null)
     }
   }
 
@@ -136,19 +201,33 @@ export function BackupSettingsPage(): JSX.Element {
               </div>
             </div>
             <Badge variant={status.connected ? 'success' : 'secondary'} className="shrink-0 gap-1">
-              {status.connected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+              {status.connected ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" />
+              )}
               {status.connected ? 'Connecté' : 'Non connecté'}
             </Badge>
           </div>
 
           <div className="flex justify-end gap-2">
             {status.connected ? (
-              <Button type="button" variant="outline" onClick={handleDisconnect} className="gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDisconnect}
+                className="gap-1.5"
+              >
                 <Unlink className="h-4 w-4" />
                 Déconnecter
               </Button>
             ) : (
-              <Button type="button" disabled={connecting} onClick={handleConnect} className="gap-1.5">
+              <Button
+                type="button"
+                disabled={connecting}
+                onClick={handleConnect}
+                className="gap-1.5"
+              >
                 <Cloud className="h-4 w-4" />
                 {connecting ? 'Connexion en cours...' : 'Connexion au compte Google'}
               </Button>
@@ -161,9 +240,12 @@ export function BackupSettingsPage(): JSX.Element {
 
               <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Sauvegarde automatique quotidienne</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    Sauvegarde automatique quotidienne
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    Une sauvegarde est envoyée chaque jour à l'heure choisie, sans intervention manuelle.
+                    Une sauvegarde est envoyée chaque jour à l’heure choisie, sans intervention
+                    manuelle.
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -198,10 +280,17 @@ export function BackupSettingsPage(): JSX.Element {
                         : ''}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Aucune sauvegarde envoyée pour le moment.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Aucune sauvegarde envoyée pour le moment.
+                    </p>
                   )}
                 </div>
-                <Button type="button" disabled={exporting} onClick={handleExportNow} className="gap-1.5">
+                <Button
+                  type="button"
+                  disabled={exporting}
+                  onClick={handleExportNow}
+                  className="gap-1.5"
+                >
                   <CloudUpload className="h-4 w-4" />
                   {exporting ? 'Envoi en cours...' : 'Sauvegarder maintenant'}
                 </Button>
@@ -217,8 +306,21 @@ export function BackupSettingsPage(): JSX.Element {
             <p className="mb-4 text-sm font-medium text-gray-900">
               Historique des sauvegardes ({history.length}/7 conservées)
             </p>
-            {history.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">Aucune sauvegarde disponible.</p>
+            {isLoadingHistory ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Récupération des sauvegardes depuis Google Drive…
+              </p>
+            ) : historyError ? (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <p className="text-sm text-destructive">{historyError}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => refresh()}>
+                  Réessayer
+                </Button>
+              </div>
+            ) : history.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Aucune sauvegarde disponible.
+              </p>
             ) : (
               <ul className="flex flex-col divide-y divide-border">
                 {history.map((entry) => (
@@ -226,7 +328,8 @@ export function BackupSettingsPage(): JSX.Element {
                     <div>
                       <p className="text-sm font-medium text-gray-900">{entry.fileName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(entry.createdAt).toLocaleString('fr-FR')} · {formatBytes(entry.sizeBytes)}
+                        {new Date(entry.createdAt).toLocaleString('fr-FR')} ·{' '}
+                        {formatBytes(entry.sizeBytes)}
                       </p>
                     </div>
                     <Button

@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightCircle, RotateCcw } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent } from '@renderer/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { FormField } from '@renderer/components/forms/FormField'
 import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
 import { Badge } from '@renderer/components/ui/badge'
@@ -14,7 +20,8 @@ import type { PromotionDecision, Student } from '@shared/types/student.types'
 
 export function ClassPromotionPage(): JSX.Element {
   const { toast } = useToast()
-  const { classes, schoolYears, currentSchoolYear, loadClasses, loadSchoolYears } = useSettingsStore()
+  const { classes, schoolYears, currentSchoolYear, loadClasses, loadSchoolYears } =
+    useSettingsStore()
 
   const [sourceClassId, setSourceClassId] = useState('')
   const [targetSchoolYearId, setTargetSchoolYearId] = useState('')
@@ -97,9 +104,9 @@ export function ClassPromotionPage(): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-2xl text-sm text-muted-foreground">
-        Le passage de classe nécessite qu'une nouvelle année scolaire ait été créée au préalable (voir
-        Paramètres → Année scolaire). L'opération est appliquée en une seule fois, intégralement, ou pas du
-        tout.
+        Le passage de classe nécessite qu’une nouvelle année scolaire ait été créée au préalable
+        (voir Paramètres → Année scolaire). L’opération est appliquée en une seule fois,
+        intégralement, ou pas du tout.
       </p>
 
       <div className="flex flex-wrap gap-4">
@@ -136,7 +143,7 @@ export function ClassPromotionPage(): JSX.Element {
 
       {targetYearOptions.length === 0 && (
         <p className="text-sm text-warning">
-          Aucune autre année scolaire disponible. Créez d'abord une nouvelle année dans Paramètres.
+          Aucune autre année scolaire disponible. Créez d’abord une nouvelle année dans Paramètres.
         </p>
       )}
 
@@ -147,7 +154,7 @@ export function ClassPromotionPage(): JSX.Element {
               <p className="py-6 text-center text-sm text-muted-foreground">Chargement...</p>
             ) : roster.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Aucun élève actif dans cette classe pour l'année {currentSchoolYear.label}.
+                Aucun élève actif dans cette classe pour l’année {currentSchoolYear.label}.
               </p>
             ) : (
               <>

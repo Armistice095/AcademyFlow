@@ -41,3 +41,14 @@ export const employeeFormSchema = z.object({
 })
 
 export type EmployeeFormValues = z.infer<typeof employeeFormSchema>
+
+/** Formulaire d'octroi d'une avance sur salaire (F-026). */
+export const salaryAdvanceFormSchema = z.object({
+  amount: z
+    .number({ invalid_type_error: 'Le montant est requis.' })
+    .int("Le montant de l'avance doit être un nombre entier.")
+    .positive("Le montant de l'avance doit être positif."),
+  reason: z.string().trim().optional()
+})
+
+export type SalaryAdvanceFormValues = z.infer<typeof salaryAdvanceFormSchema>

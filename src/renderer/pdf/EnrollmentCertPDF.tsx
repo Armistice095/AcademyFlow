@@ -22,16 +22,16 @@ export function EnrollmentCertPDF({
     <Document title={`Attestation d'inscription - ${student.firstName} ${student.lastName}`}>
       <Page size="A4" style={pdfStyles.page}>
         <PdfHeader schoolInfo={schoolInfo} />
-        <Text style={pdfStyles.title}>Attestation d'inscription</Text>
+        <Text style={pdfStyles.title}>Attestation d’inscription</Text>
 
         <Text style={pdfStyles.paragraph}>
-          Je soussigné(e), Directeur/Directrice de {schoolInfo.name || "l'établissement"}, atteste par la
-          présente que l'élève désigné(e) ci-dessous est régulièrement inscrit(e) dans notre établissement
-          au titre de l'année scolaire {schoolYearLabel}, en classe de {className}.
+          Je soussigné(e), Directeur/Directrice de {schoolInfo.name || "l'établissement"}, atteste
+          par la présente que l’élève désigné(e) ci-dessous est régulièrement inscrit(e) dans notre
+          établissement au titre de l’année scolaire {schoolYearLabel}, en classe de {className}.
         </Text>
 
         <View style={pdfStyles.section}>
-          <Text style={pdfStyles.sectionTitle}>Identité de l'élève</Text>
+          <Text style={pdfStyles.sectionTitle}>Identité de l’élève</Text>
           <View style={pdfStyles.row}>
             <Text style={pdfStyles.label}>Matricule</Text>
             <Text style={pdfStyles.value}>{student.matricule}</Text>
@@ -57,7 +57,8 @@ export function EnrollmentCertPDF({
         </View>
 
         <Text style={pdfStyles.paragraph}>
-          En foi de quoi, la présente attestation lui est délivrée pour servir et valoir ce que de droit.
+          En foi de quoi, la présente attestation lui est délivrée pour servir et valoir ce que de
+          droit.
         </Text>
 
         <SignatureBlock schoolInfo={schoolInfo} />

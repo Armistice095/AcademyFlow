@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, PaginationState } from '@tanstack/react-table'
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -14,14 +14,26 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { Input } from '@renderer/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
 import { DataTable } from '@renderer/components/data-table/DataTable'
 import { DataTableToolbar } from '@renderer/components/data-table/DataTableToolbar'
 import { KpiCard } from '@renderer/pages/dashboard/components/KpiCard'
@@ -48,6 +60,7 @@ export function CashboxJournalPage(): JSX.Element {
   const [query, setQuery] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
   const [operatorNames, setOperatorNames] = useState<Record<string, string>>({})
   const [studentNames, setStudentNames] = useState<Record<string, string>>({})
   const [transactionToCancel, setTransactionToCancel] = useState<JournalTransaction | null>(null)
@@ -65,12 +78,20 @@ export function CashboxJournalPage(): JSX.Element {
       query: query || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo ? `${dateTo}T23:59:59.999Z` : undefined,
-      schoolYearId: currentSchoolYear?.id
+      schoolYearId: currentSchoolYear?.id,
+      page: pagination.pageIndex + 1,
+      pageSize: pagination.pageSize
     }),
-    [type, query, dateFrom, dateTo, currentSchoolYear]
+    [type, query, dateFrom, dateTo, currentSchoolYear, pagination]
   )
 
   const { stats, journal, isLoading } = useCashbox(filters)
+
+  // Revenir à la page 1 dès qu'un filtre (hors pagination) change, pour éviter
+  // de se retrouver sur une page qui n'existe plus dans le nouveau résultat.
+  useEffect(() => {
+    setPagination((prev) => (prev.pageIndex === 0 ? prev : { ...prev, pageIndex: 0 }))
+  }, [type, query, dateFrom, dateTo, currentSchoolYear?.id])
 
   useEffect(() => {
     const uniqueUserIds = [...new Set((journal?.items ?? []).map((t) => t.userId))].filter(
@@ -89,7 +110,9 @@ export function CashboxJournalPage(): JSX.Element {
     }
 
     const uniqueStudentIds = [
-      ...new Set((journal?.items ?? []).map((t) => t.studentId).filter((id): id is string => id !== null))
+      ...new Set(
+        (journal?.items ?? []).map((t) => t.studentId).filter((id): id is string => id !== null)
+      )
     ].filter((id) => !studentNames[id])
     if (uniqueStudentIds.length > 0) {
       Promise.all(uniqueStudentIds.map((id) => api.students.findById(id))).then((studentsFound) => {
@@ -129,14 +152,20 @@ export function CashboxJournalPage(): JSX.Element {
     try {
       const receipt = await api.cashbox.getReceipt(transaction.id)
       if (!receipt) {
-        toast({ title: 'Aucun reçu', description: "Cette opération n'a pas de reçu associé.", variant: 'destructive' })
+        toast({
+          title: 'Aucun reçu',
+          description: "Cette opération n'a pas de reçu associé.",
+          variant: 'destructive'
+        })
         return
       }
       await printReceiptWithFallback(receipt.id, async () => {
         const updatedReceipt = await api.cashbox.reprintReceipt(transaction.id)
         const [schoolInfo, student, operator] = await Promise.all([
           api.settings.getSchoolInfo(),
-          transaction.studentId ? api.students.findById(transaction.studentId) : Promise.resolve(null),
+          transaction.studentId
+            ? api.students.findById(transaction.studentId)
+            : Promise.resolve(null),
           api.auth.getUserById(transaction.userId)
         ])
         await openPdf(
@@ -152,7 +181,11 @@ export function CashboxJournalPage(): JSX.Element {
         )
       })
     } catch {
-      toast({ title: 'Échec', description: "Impossible de réimprimer le reçu.", variant: 'destructive' })
+      toast({
+        title: 'Échec',
+        description: 'Impossible de réimprimer le reçu.',
+        variant: 'destructive'
+      })
     }
   }
 
@@ -181,14 +214,26 @@ export function CashboxJournalPage(): JSX.Element {
         header: 'Motif',
         cell: ({ row }) => {
           const motif =
-            row.original.description?.trim() || CASH_CATEGORY_LABELS[row.original.category as CashCategory]
-          const studentLabel = row.original.studentId ? (studentNames[row.original.studentId] ?? '...') : null
+            row.original.description?.trim() ||
+            CASH_CATEGORY_LABELS[row.original.category as CashCategory]
+          const studentLabel = row.original.studentId
+            ? (studentNames[row.original.studentId] ?? '...')
+            : null
           return (
-            <div className={cn('min-w-0', row.original.status === 'cancelled' && 'opacity-50')}>
-              <p className={cn('truncate font-medium text-foreground', row.original.status === 'cancelled' && 'line-through')}>
+            <div
+              className={cn('max-w-[420px]', row.original.status === 'cancelled' && 'opacity-50')}
+            >
+              <p
+                className={cn(
+                  'break-words font-medium leading-snug text-foreground',
+                  row.original.status === 'cancelled' && 'line-through'
+                )}
+              >
                 {motif}
               </p>
-              {studentLabel && <p className="truncate text-xs text-muted-foreground">{studentLabel}</p>}
+              {studentLabel && (
+                <p className="truncate text-xs text-muted-foreground">{studentLabel}</p>
+              )}
               {row.original.status === 'cancelled' && row.original.cancelReason && (
                 <p className="truncate text-xs italic text-muted-foreground">
                   Annulée : {row.original.cancelReason}
@@ -235,7 +280,9 @@ export function CashboxJournalPage(): JSX.Element {
       {
         id: 'runningBalance',
         header: 'Solde cumulé',
-        cell: ({ row }) => <span className="font-mono font-semibold">{formatCFA(row.original.balanceAfter)}</span>
+        cell: ({ row }) => (
+          <span className="font-mono font-semibold">{formatCFA(row.original.balanceAfter)}</span>
+        )
       },
       {
         id: 'operator',
@@ -283,6 +330,10 @@ export function CashboxJournalPage(): JSX.Element {
         )
       }
     ],
+    // handleReprint est recréée à chaque rendu mais ne capture aucun état
+    // mutable (uniquement `transaction`, passé en argument, et des références
+    // stables), donc l'inclure ici ne ferait que recalculer les colonnes inutilement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [operatorNames, studentNames]
   )
 
@@ -311,7 +362,11 @@ export function CashboxJournalPage(): JSX.Element {
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-1.5" onClick={() => navigate('/cashbox/new?type=exit')}>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => navigate('/cashbox/new?type=exit')}
+          >
             <MinusCircle className="h-4 w-4" />
             Nouvelle sortie
           </Button>
@@ -337,8 +392,18 @@ export function CashboxJournalPage(): JSX.Element {
                 <SelectItem value="exit">Sorties</SelectItem>
               </SelectContent>
             </Select>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-40"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-40"
+            />
           </>
         }
       />
@@ -348,17 +413,24 @@ export function CashboxJournalPage(): JSX.Element {
         data={journal?.items ?? []}
         isLoading={isLoading}
         emptyMessage="Aucune opération enregistrée pour cette année scolaire."
+        manualPagination
+        pagination={pagination}
+        onPaginationChange={setPagination}
+        rowCount={journal?.total ?? 0}
       />
 
-      <Dialog open={transactionToCancel !== null} onOpenChange={(open) => !open && setTransactionToCancel(null)}>
+      <Dialog
+        open={transactionToCancel !== null}
+        onOpenChange={(open) => !open && setTransactionToCancel(null)}
+      >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Annuler cette opération ?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Cette opération sera marquée comme <strong>annulée</strong> et retirée du solde de caisse.
-            Elle restera visible dans le journal, barrée, avec le motif ci-dessous (BR-005 : aucune donnée
-            n'est jamais supprimée).
+            Cette opération sera marquée comme <strong>annulée</strong> et retirée du solde de
+            caisse. Elle restera visible dans le journal, barrée, avec le motif ci-dessous (BR-005 :
+            aucune donnée n’est jamais supprimée).
           </p>
           <Input
             placeholder="Motif de l'annulation..."
@@ -370,7 +442,11 @@ export function CashboxJournalPage(): JSX.Element {
             <Button variant="outline" onClick={() => setTransactionToCancel(null)}>
               Retour
             </Button>
-            <Button variant="destructive" onClick={handleCancel} disabled={cancelling || !cancelReason.trim()}>
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={cancelling || !cancelReason.trim()}
+            >
               {cancelling ? 'Annulation...' : "Confirmer l'annulation"}
             </Button>
           </DialogFooter>

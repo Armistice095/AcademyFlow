@@ -4,7 +4,13 @@ import { ArrowDownCircle, ArrowUpCircle, Check, Save, Search, X } from 'lucide-r
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Card, CardContent } from '@renderer/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { FormField } from '@renderer/components/forms/FormField'
 import { MoneyInput } from '@renderer/components/forms/MoneyInput'
 import { useToast } from '@renderer/lib/use-toast'
@@ -79,7 +85,6 @@ export function NewTransactionPage(): JSX.Element {
     api.students
       .search({ query: debouncedStudentQuery, pageSize: 6, schoolYearId: currentSchoolYear?.id })
       .then((res) => setStudentResults(res.items))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedStudentQuery, currentSchoolYear])
 
   useEffect(() => {
@@ -89,7 +94,6 @@ export function NewTransactionPage(): JSX.Element {
       setAccount(null)
       setInstallmentId('')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStudent, category])
 
   const selectedInstallment = account?.installments.find((i) => i.installmentId === installmentId)
@@ -178,7 +182,9 @@ export function NewTransactionPage(): JSX.Element {
           }}
           className={cn(
             'flex flex-1 items-center justify-center gap-2 rounded-lg border py-3 text-sm font-medium transition-colors',
-            type === 'entry' ? 'border-success bg-success/10 text-success' : 'border-input text-muted-foreground'
+            type === 'entry'
+              ? 'border-success bg-success/10 text-success'
+              : 'border-input text-muted-foreground'
           )}
         >
           <ArrowDownCircle className="h-4 w-4" />
@@ -193,7 +199,9 @@ export function NewTransactionPage(): JSX.Element {
           }}
           className={cn(
             'flex flex-1 items-center justify-center gap-2 rounded-lg border py-3 text-sm font-medium transition-colors',
-            type === 'exit' ? 'border-destructive bg-destructive/10 text-destructive' : 'border-input text-muted-foreground'
+            type === 'exit'
+              ? 'border-destructive bg-destructive/10 text-destructive'
+              : 'border-input text-muted-foreground'
           )}
         >
           <ArrowUpCircle className="h-4 w-4" />
@@ -223,7 +231,8 @@ export function NewTransactionPage(): JSX.Element {
               {selectedStudent ? (
                 <div className="flex items-center justify-between rounded-md border border-input px-3 py-2">
                   <span className="text-sm">
-                    {selectedStudent.lastName} {selectedStudent.firstName} ({selectedStudent.matricule})
+                    {selectedStudent.lastName} {selectedStudent.firstName} (
+                    {selectedStudent.matricule})
                   </span>
                   <button type="button" onClick={() => setSelectedStudent(null)}>
                     <X className="h-4 w-4 text-muted-foreground" />
@@ -295,7 +304,11 @@ export function NewTransactionPage(): JSX.Element {
           </FormField>
 
           <FormField label={type === 'entry' ? 'Description' : 'Motif'} htmlFor="description">
-            <Input id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Input
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </FormField>
 
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}

@@ -4,13 +4,16 @@ import { Button } from '@renderer/components/ui/button'
 
 export interface DataTablePaginationProps<TData> {
   table: Table<TData>
+  /** Nombre total de lignes côté serveur (mode pagination manuelle) ; sinon calculé côté client. */
+  rowCount?: number
 }
 
 export function DataTablePagination<TData>({
-  table
+  table,
+  rowCount
 }: DataTablePaginationProps<TData>): JSX.Element {
   const { pageIndex, pageSize } = table.getState().pagination
-  const total = table.getFilteredRowModel().rows.length
+  const total = rowCount ?? table.getFilteredRowModel().rows.length
   const from = total === 0 ? 0 : pageIndex * pageSize + 1
   const to = Math.min(total, (pageIndex + 1) * pageSize)
 

@@ -69,7 +69,11 @@ export function recordTestResult(success: boolean, message: string | null): Prin
   getPrinterConfig()
 
   db.update(printerConfig)
-    .set({ lastTestAt: new Date().toISOString(), lastTestSuccess: success, lastTestMessage: message })
+    .set({
+      lastTestAt: new Date().toISOString(),
+      lastTestSuccess: success,
+      lastTestMessage: message
+    })
     .where(eq(printerConfig.id, PRINTER_CONFIG_ID))
     .run()
 

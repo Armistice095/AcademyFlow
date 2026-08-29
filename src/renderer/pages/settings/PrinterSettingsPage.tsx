@@ -68,7 +68,10 @@ export function PrinterSettingsPage(): JSX.Element {
         port: config.port
       })
       setConfig(updated)
-      toast({ title: 'Configuration enregistrée', description: "Les réglages de l'imprimante ont été mis à jour." })
+      toast({
+        title: 'Configuration enregistrée',
+        description: "Les réglages de l'imprimante ont été mis à jour."
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Échec de la sauvegarde.')
     } finally {
@@ -85,7 +88,10 @@ export function PrinterSettingsPage(): JSX.Element {
       setConfig(refreshed)
 
       if (status.connected) {
-        toast({ title: 'Connexion réussie', description: "Un ticket de test a été envoyé à l'imprimante." })
+        toast({
+          title: 'Connexion réussie',
+          description: "Un ticket de test a été envoyé à l'imprimante."
+        })
       } else {
         toast({
           title: 'Échec de la connexion',
@@ -116,12 +122,19 @@ export function PrinterSettingsPage(): JSX.Element {
             <Printer className="mt-0.5 h-5 w-5 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
               Impression thermique des reçus de paiement (imprimante 80mm ESC/POS). Si elle est
-              désactivée ou injoignable, l'application ouvre automatiquement le reçu au format PDF.
+              désactivée ou injoignable, l’application ouvre automatiquement le reçu au format PDF.
             </p>
           </div>
           {config.lastTestSuccess !== null && (
-            <Badge variant={config.lastTestSuccess ? 'success' : 'destructive'} className="shrink-0 gap-1">
-              {config.lastTestSuccess ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+            <Badge
+              variant={config.lastTestSuccess ? 'success' : 'destructive'}
+              className="shrink-0 gap-1"
+            >
+              {config.lastTestSuccess ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" />
+              )}
               {config.lastTestSuccess ? 'Connectée' : 'Non connectée'}
             </Badge>
           )}
@@ -169,7 +182,11 @@ export function PrinterSettingsPage(): JSX.Element {
                     placeholder="Ex: 192.168.1.50"
                   />
                 </FormField>
-                <FormField label="Port TCP" htmlFor="printer-port" hint="9100 par défaut (port RAW standard).">
+                <FormField
+                  label="Port TCP"
+                  htmlFor="printer-port"
+                  hint="9100 par défaut (port RAW standard)."
+                >
                   <Input
                     id="printer-port"
                     type="number"
@@ -203,12 +220,20 @@ export function PrinterSettingsPage(): JSX.Element {
           {config.lastTestAt && (
             <p className="text-xs text-muted-foreground">
               Dernier test : {new Date(config.lastTestAt).toLocaleString('fr-FR')}
-              {!config.lastTestSuccess && config.lastTestMessage ? ` — ${config.lastTestMessage}` : ''}
+              {!config.lastTestSuccess && config.lastTestMessage
+                ? ` — ${config.lastTestMessage}`
+                : ''}
             </p>
           )}
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" disabled={testing} onClick={handleTest} className="gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testing}
+              onClick={handleTest}
+              className="gap-1.5"
+            >
               <Printer className="h-4 w-4" />
               {testing ? 'Test en cours...' : "Tester l'impression"}
             </Button>

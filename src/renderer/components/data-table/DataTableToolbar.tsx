@@ -20,7 +20,11 @@ export function DataTableToolbar({
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {onSearch && (
-          <SearchInput onSearch={onSearch} placeholder={searchPlaceholder} className="w-full max-w-xs" />
+          <SearchInput
+            onSearch={onSearch}
+            placeholder={searchPlaceholder}
+            className="w-full max-w-sm"
+          />
         )}
         {filters}
       </div>

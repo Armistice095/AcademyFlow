@@ -1,1 +1,92 @@
-node_modules
+# ============================================================
+# AcademyFlow — .gitignore
+# Electron + electron-vite + Drizzle/better-sqlite3 + electron-builder
+# ============================================================
+
+# --- Dépendances ---
+node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# --- Build applicatif (electron-vite) ---
+/out/
+dist/
+dist-electron/
+
+# --- Packaging (electron-builder) ---
+release/
+build/*
+!build/README.md
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.blockmap
+*.snap
+
+# --- Secrets & configuration locale ---
+# Le .env contient les identifiants OAuth Google Drive et l'URL de l'API
+# de licence — ne JAMAIS versionner. .env.example reste suivi (voir ce fichier).
+.env
+.env.*
+!.env.example
+
+# --- Base de données locale (Drizzle / better-sqlite3) ---
+# Les migrations SQL dans resources/migrations restent versionnées ;
+# seuls les fichiers de base de données générés à l'exécution sont ignorés.
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# --- Modules natifs recompilés (better-sqlite3, node-thermal-printer) ---
+# Reconstruits via `npm run rebuild:node` / postinstall electron-builder ;
+# spécifiques à l'ABI Node/Electron de la machine, donc à ne pas versionner.
+*.node
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Fichiers de licence/activation générés localement ---
+# (empreinte machine, cache d'activation — spécifiques à chaque poste)
+*.license
+license-cache.json
+machine-fingerprint.json
+
+# --- Outils & éditeurs ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ninja_log
+
+# --- Système d'exploitation ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Tests / couverture ---
+coverage/
+*.tsbuildinfo
+
+# --- Divers temporaires ---
+*.tmp
+*.temp
+.cache/

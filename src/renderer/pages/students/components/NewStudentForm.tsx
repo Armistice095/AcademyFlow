@@ -6,7 +6,13 @@ import { AlertTriangle, Plus, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { Separator } from '@renderer/components/ui/separator'
 import { FormField } from '@renderer/components/forms/FormField'
 import { DatePickerField } from '@renderer/components/forms/DatePickerField'
@@ -119,22 +125,31 @@ export function NewStudentForm(): JSX.Element {
           <CardTitle>Identité &amp; Scolarité</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Controller
-            control={control}
-            name="photoPath"
-            render={({ field }) => (
-              <ImageUpload
-                label="Photo (optionnel)"
-                value={field.value ?? null}
-                onChange={(dataUrl) => field.onChange(dataUrl ?? undefined)}
-              />
-            )}
-          />
+          <div className="sm:col-span-2">
+            <Controller
+              control={control}
+              name="photoPath"
+              render={({ field }) => (
+                <ImageUpload
+                  label="Photo (optionnel)"
+                  hint="JPG ou PNG, 2 Mo maximum."
+                  shape="avatar"
+                  value={field.value ?? null}
+                  onChange={(dataUrl) => field.onChange(dataUrl ?? undefined)}
+                />
+              )}
+            />
+          </div>
 
           <FormField label="Nom" htmlFor="lastName" required error={errors.lastName?.message}>
             <Input id="lastName" {...register('lastName')} />
           </FormField>
-          <FormField label="Prénom(s)" htmlFor="firstName" required error={errors.firstName?.message}>
+          <FormField
+            label="Prénom(s)"
+            htmlFor="firstName"
+            required
+            error={errors.firstName?.message}
+          >
             <Input id="firstName" {...register('firstName')} />
           </FormField>
 
@@ -156,12 +171,21 @@ export function NewStudentForm(): JSX.Element {
             />
           </FormField>
 
-          <FormField label="Date de naissance" htmlFor="dateOfBirth" required error={errors.dateOfBirth?.message}>
+          <FormField
+            label="Date de naissance"
+            htmlFor="dateOfBirth"
+            required
+            error={errors.dateOfBirth?.message}
+          >
             <Controller
               control={control}
               name="dateOfBirth"
               render={({ field }) => (
-                <DatePickerField id="dateOfBirth" value={field.value ?? ''} onChange={field.onChange} />
+                <DatePickerField
+                  id="dateOfBirth"
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                />
               )}
             />
           </FormField>
@@ -170,7 +194,12 @@ export function NewStudentForm(): JSX.Element {
             <Input id="placeOfBirth" {...register('placeOfBirth')} />
           </FormField>
 
-          <FormField label="Nationalité" htmlFor="nationality" required error={errors.nationality?.message}>
+          <FormField
+            label="Nationalité"
+            htmlFor="nationality"
+            required
+            error={errors.nationality?.message}
+          >
             <Input id="nationality" {...register('nationality')} />
           </FormField>
 
@@ -248,7 +277,10 @@ export function NewStudentForm(): JSX.Element {
                   required
                   error={errors.guardians?.[index]?.lastName?.message}
                 >
-                  <Input id={`guardians.${index}.lastName`} {...register(`guardians.${index}.lastName`)} />
+                  <Input
+                    id={`guardians.${index}.lastName`}
+                    {...register(`guardians.${index}.lastName`)}
+                  />
                 </FormField>
                 <FormField
                   label="Prénom"
@@ -256,7 +288,10 @@ export function NewStudentForm(): JSX.Element {
                   required
                   error={errors.guardians?.[index]?.firstName?.message}
                 >
-                  <Input id={`guardians.${index}.firstName`} {...register(`guardians.${index}.firstName`)} />
+                  <Input
+                    id={`guardians.${index}.firstName`}
+                    {...register(`guardians.${index}.firstName`)}
+                  />
                 </FormField>
                 <FormField
                   label="Téléphone"
@@ -264,10 +299,16 @@ export function NewStudentForm(): JSX.Element {
                   required
                   error={errors.guardians?.[index]?.phone?.message}
                 >
-                  <Input id={`guardians.${index}.phone`} {...register(`guardians.${index}.phone`)} />
+                  <Input
+                    id={`guardians.${index}.phone`}
+                    {...register(`guardians.${index}.phone`)}
+                  />
                 </FormField>
                 <FormField label="Profession" htmlFor={`guardians.${index}.profession`}>
-                  <Input id={`guardians.${index}.profession`} {...register(`guardians.${index}.profession`)} />
+                  <Input
+                    id={`guardians.${index}.profession`}
+                    {...register(`guardians.${index}.profession`)}
+                  />
                 </FormField>
                 <FormField
                   label="Lien de parenté"
@@ -294,7 +335,7 @@ export function NewStudentForm(): JSX.Element {
         </p>
       )}
 
-      <div className="flex justify-end gap-2 pb-6">
+      <div className="sticky bottom-0 z-10 flex justify-end gap-2 border-t border-border bg-background/95 py-4 backdrop-blur supports-backdrop-blur:bg-background/80">
         <Button type="button" variant="outline" onClick={() => navigate('/students')}>
           Annuler
         </Button>

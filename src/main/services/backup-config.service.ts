@@ -1,7 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { getDb } from '@main/database'
 import { backupConfig } from '@main/database/schema'
-import type { BackupAccountStatus, BackupStatus, UpdateBackupSettingsDTO } from '@shared/types/backup.types'
+import type {
+  BackupAccountStatus,
+  BackupStatus,
+  UpdateBackupSettingsDTO
+} from '@shared/types/backup.types'
 
 /** Identifiant fixe de l'unique ligne de la table BACKUP_CONFIG (même convention que `printer-config.service.ts`). */
 const BACKUP_CONFIG_ID = 'singleton'

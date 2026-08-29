@@ -64,10 +64,12 @@ export function SalaryTrackingPage(): JSX.Element {
     if (!employeeToPay) return
     setPaying(true)
     try {
-      await api.personnel.markSalaryPaid(employeeToPay.employee.id, month, year)
+      const result = await api.personnel.markSalaryPaid(employeeToPay.employee.id, month, year)
       toast({
         title: 'Salaire payé',
-        description: `Une sortie de caisse a été créée pour ${employeeToPay.employee.firstName} ${employeeToPay.employee.lastName}.`
+        description: result.deductedAdvance
+          ? `Sortie de caisse de ${formatCFA(result.netAmount)} créée pour ${employeeToPay.employee.firstName} ${employeeToPay.employee.lastName} (salaire de ${formatCFA(result.grossAmount)}, moins avance de ${formatCFA(result.deductedAdvance.amount)}).`
+          : `Une sortie de caisse a été créée pour ${employeeToPay.employee.firstName} ${employeeToPay.employee.lastName}.`
       })
       setEmployeeToPay(null)
       await refreshSalaryStatus()
@@ -204,6 +206,12 @@ export function SalaryTrackingPage(): JSX.Element {
                   <TableCell>{status.employee.role}</TableCell>
                   <TableCell className="font-mono">
                     {formatCFA(status.employee.monthlySalary)}
+                    {!!status.pendingAdvanceAmount && !status.isPaid && (
+                      <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                        Avance {formatCFA(status.pendingAdvanceAmount)} à déduire — net{' '}
+                        {formatCFA(status.employee.monthlySalary - status.pendingAdvanceAmount)}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     {status.isPaid ? (
@@ -239,7 +247,11 @@ export function SalaryTrackingPage(): JSX.Element {
         open={employeeToPay !== null}
         onOpenChange={(open) => !open && setEmployeeToPay(null)}
         title="Confirmer le paiement du salaire ?"
-        description={`Le salaire de ${employeeToPay?.employee.firstName} ${employeeToPay?.employee.lastName} (${employeeToPay ? formatCFA(employeeToPay.employee.monthlySalary) : ''}) pour ${employeeToPay ? MONTH_LABELS_FR[employeeToPay.month - 1] : ''} ${employeeToPay?.year} sera marqué payé, et une sortie de caisse correspondante sera créée automatiquement (BR-008). Cette opération ne pourra pas être répétée pour ce mois (BR-009).`}
+        description={
+          employeeToPay?.pendingAdvanceAmount
+            ? `Le salaire de ${employeeToPay.employee.firstName} ${employeeToPay.employee.lastName} (${formatCFA(employeeToPay.employee.monthlySalary)}) pour ${MONTH_LABELS_FR[employeeToPay.month - 1]} ${employeeToPay.year} sera marqué payé. Son avance en attente de ${formatCFA(employeeToPay.pendingAdvanceAmount)} sera automatiquement déduite : la sortie de caisse créée sera de ${formatCFA(employeeToPay.employee.monthlySalary - employeeToPay.pendingAdvanceAmount)} (BR-010). Cette opération ne pourra pas être répétée pour ce mois (BR-009).`
+            : `Le salaire de ${employeeToPay?.employee.firstName} ${employeeToPay?.employee.lastName} (${employeeToPay ? formatCFA(employeeToPay.employee.monthlySalary) : ''}) pour ${employeeToPay ? MONTH_LABELS_FR[employeeToPay.month - 1] : ''} ${employeeToPay?.year} sera marqué payé, et une sortie de caisse correspondante sera créée automatiquement (BR-008). Cette opération ne pourra pas être répétée pour ce mois (BR-009).`
+        }
         confirmLabel={paying ? 'Paiement...' : 'Confirmer le paiement'}
         onConfirm={handlePay}
       />

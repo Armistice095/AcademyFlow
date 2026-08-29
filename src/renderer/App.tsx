@@ -3,6 +3,14 @@ import { Toaster } from '@renderer/components/ui/toaster'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { AuthGuard } from '@renderer/components/layout/AuthGuard'
+import { OnboardingGuard } from '@renderer/components/layout/OnboardingGuard'
+import { OnboardingTransitionOutlet } from '@renderer/components/layout/OnboardingTransitionOutlet'
+import { LicenseActivationPage } from '@renderer/pages/onboarding/LicenseActivationPage'
+import { SchoolInfoOnboardingPage } from '@renderer/pages/onboarding/SchoolInfoOnboardingPage'
+import { AdminAccountPage } from '@renderer/pages/onboarding/AdminAccountPage'
+import { ClassesSetupPage } from '@renderer/pages/onboarding/ClassesSetupPage'
+import { SchoolYearSetupPage } from '@renderer/pages/onboarding/SchoolYearSetupPage'
+import { GoogleDriveSetupPage } from '@renderer/pages/onboarding/GoogleDriveSetupPage'
 import { LoginPage } from '@renderer/pages/auth/LoginPage'
 import { DashboardPage } from '@renderer/pages/dashboard/DashboardPage'
 import { StudentsListPage } from '@renderer/pages/students/StudentsListPage'
@@ -11,7 +19,13 @@ import { StudentDetailPage } from '@renderer/pages/students/StudentDetailPage'
 import { ClassPromotionPage } from '@renderer/pages/students/ClassPromotionPage'
 import { CashboxJournalPage } from '@renderer/pages/cashbox/CashboxJournalPage'
 import { NewTransactionPage } from '@renderer/pages/cashbox/NewTransactionPage'
-import { ReportsPage } from '@renderer/pages/cashbox/ReportsPage'
+import { ReportsLayout } from '@renderer/pages/cashbox/reports/ReportsLayout'
+import { OverviewReportPage } from '@renderer/pages/cashbox/reports/OverviewReportPage'
+import { RevenueReportPage } from '@renderer/pages/cashbox/reports/RevenueReportPage'
+import { ExpensesReportPage } from '@renderer/pages/cashbox/reports/ExpensesReportPage'
+import { ArrearsReportPage } from '@renderer/pages/cashbox/reports/ArrearsReportPage'
+import { ByClassReportPage } from '@renderer/pages/cashbox/reports/ByClassReportPage'
+import { ByCashierReportPage } from '@renderer/pages/cashbox/reports/ByCashierReportPage'
 import { StudentAccountPage } from '@renderer/pages/cashbox/StudentAccountPage'
 import { PersonnelListPage } from '@renderer/pages/personnel/PersonnelListPage'
 import { SalaryTrackingPage } from '@renderer/pages/personnel/SalaryTrackingPage'
@@ -28,29 +42,47 @@ function App(): JSX.Element {
     <TooltipProvider>
       <HashRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route element={<OnboardingGuard />}>
+            <Route element={<OnboardingTransitionOutlet />}>
+              <Route path="/onboarding/license" element={<LicenseActivationPage />} />
+              <Route path="/onboarding/school" element={<SchoolInfoOnboardingPage />} />
+              <Route path="/onboarding/admin" element={<AdminAccountPage />} />
+              <Route path="/onboarding/classes" element={<ClassesSetupPage />} />
+              <Route path="/onboarding/school-year" element={<SchoolYearSetupPage />} />
+              <Route path="/onboarding/drive" element={<GoogleDriveSetupPage />} />
+            </Route>
 
-          <Route element={<AuthGuard />}>
-            <Route path="/" element={<AppShell />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="/login" element={<LoginPage />} />
 
-              <Route path="students" element={<StudentsListPage />} />
-              <Route path="students/new" element={<StudentCreatePage />} />
-              <Route path="students/promotion" element={<ClassPromotionPage />} />
-              <Route path="students/:id" element={<StudentDetailPage />} />
+            <Route element={<AuthGuard />}>
+              <Route path="/" element={<AppShell />}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardPage />} />
 
-              <Route path="cashbox" element={<CashboxJournalPage />} />
-              <Route path="cashbox/new" element={<NewTransactionPage />} />
-              <Route path="cashbox/reports" element={<ReportsPage />} />
-              <Route path="cashbox/student/:id" element={<StudentAccountPage />} />
+                <Route path="students" element={<StudentsListPage />} />
+                <Route path="students/new" element={<StudentCreatePage />} />
+                <Route path="students/promotion" element={<ClassPromotionPage />} />
+                <Route path="students/:id" element={<StudentDetailPage />} />
 
-              <Route path="personnel" element={<PersonnelListPage />} />
-              <Route path="personnel/salaries" element={<SalaryTrackingPage />} />
+                <Route path="cashbox" element={<CashboxJournalPage />} />
+                <Route path="cashbox/new" element={<NewTransactionPage />} />
+                <Route path="cashbox/reports" element={<ReportsLayout />}>
+                  <Route index element={<OverviewReportPage />} />
+                  <Route path="recettes" element={<RevenueReportPage />} />
+                  <Route path="depenses" element={<ExpensesReportPage />} />
+                  <Route path="impayes" element={<ArrearsReportPage />} />
+                  <Route path="par-classe" element={<ByClassReportPage />} />
+                  <Route path="par-caissier" element={<ByCashierReportPage />} />
+                </Route>
+                <Route path="cashbox/student/:id" element={<StudentAccountPage />} />
 
-              <Route path="settings" element={<SettingsPage />} />
+                <Route path="personnel" element={<PersonnelListPage />} />
+                <Route path="personnel/salaries" element={<SalaryTrackingPage />} />
 
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route path="settings" element={<SettingsPage />} />
+
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
             </Route>
           </Route>
         </Routes>

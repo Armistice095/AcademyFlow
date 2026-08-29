@@ -1,4 +1,5 @@
 import { registerSystemIpcHandlers } from './system.ipc'
+import { registerLicenseIpcHandlers } from './license.ipc'
 import { registerStudentsIpcHandlers } from './students.ipc'
 import { registerCashboxIpcHandlers } from './cashbox.ipc'
 import { registerPersonnelIpcHandlers } from './personnel.ipc'
@@ -15,6 +16,7 @@ import { registerDashboardIpcHandlers } from './dashboard.ipc'
  */
 export function registerAllIpcHandlers(): void {
   registerSystemIpcHandlers()
+  registerLicenseIpcHandlers()
   registerStudentsIpcHandlers()
   registerCashboxIpcHandlers()
   registerPersonnelIpcHandlers()

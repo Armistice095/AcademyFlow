@@ -97,7 +97,12 @@ export function ChangePasswordDialog({
               required
             />
           </FormField>
-          <FormField label="Nouveau mot de passe" htmlFor="newPassword" required hint="Au moins 6 caractères.">
+          <FormField
+            label="Nouveau mot de passe"
+            htmlFor="newPassword"
+            required
+            hint="Au moins 6 caractères."
+          >
             <Input
               id="newPassword"
               type="password"

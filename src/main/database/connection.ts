@@ -44,7 +44,9 @@ export function createConnection(): { sqlite: Database.Database; db: AppDatabase
 /** Accès à l'instance Drizzle active. Lève une erreur si `createConnection()` n'a pas été appelée. */
 export function getDb(): AppDatabase {
   if (!dbInstance) {
-    throw new Error('La base de données n\'est pas initialisée. Appeler createConnection() au démarrage.')
+    throw new Error(
+      "La base de données n'est pas initialisée. Appeler createConnection() au démarrage."
+    )
   }
   return dbInstance
 }
@@ -56,7 +58,9 @@ export function getDb(): AppDatabase {
  */
 export function getSqlite(): Database.Database {
   if (!sqliteInstance) {
-    throw new Error('La base de données n\'est pas initialisée. Appeler createConnection() au démarrage.')
+    throw new Error(
+      "La base de données n'est pas initialisée. Appeler createConnection() au démarrage."
+    )
   }
   return sqliteInstance
 }

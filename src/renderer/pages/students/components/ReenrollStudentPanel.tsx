@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, User, UserCheck, X } from 'lucide-react'
+import { ChevronRight, Search, UserCheck, X } from 'lucide-react'
 import { Card, CardContent } from '@renderer/components/ui/card'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
+import { StudentAvatar } from '@renderer/components/students/StudentAvatar'
 import { SearchInput } from '@renderer/components/forms/SearchInput'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { FormField } from '@renderer/components/forms/FormField'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@renderer/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useToast } from '@renderer/lib/use-toast'
 import { api } from '@renderer/lib/ipc'
@@ -107,22 +115,19 @@ export function ReenrollStudentPanel(): JSX.Element {
         <CardContent className="flex flex-col gap-5 p-6">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              {selected.photoPath ? (
-                <img
-                  src={selected.photoPath}
-                  alt=""
-                  className="h-12 w-12 rounded-full border border-border object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-input bg-muted">
-                  <User className="h-5 w-5 text-muted-foreground" />
-                </div>
-              )}
+              <StudentAvatar
+                firstName={selected.firstName}
+                lastName={selected.lastName}
+                photoPath={selected.photoPath}
+                size="md"
+              />
               <div>
                 <p className="font-medium text-foreground">
                   {selected.lastName} {selected.firstName}
                 </p>
-                <p className="font-mono text-xs text-muted-foreground">{formatMatricule(selected.matricule)}</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {formatMatricule(selected.matricule)}
+                </p>
               </div>
             </div>
             <Button type="button" variant="ghost" size="icon" onClick={handleReset}>
@@ -132,7 +137,8 @@ export function ReenrollStudentPanel(): JSX.Element {
 
           {alreadyEnrolled && (
             <p className="rounded-md bg-warning/10 px-3 py-2 text-sm text-warning">
-              Cet élève est déjà inscrit en {selectedCurrentClass} pour l'année {currentSchoolYear?.label}.
+              Cet élève est déjà inscrit en {selectedCurrentClass} pour l’année{' '}
+              {currentSchoolYear?.label}.
             </p>
           )}
 
@@ -182,14 +188,32 @@ export function ReenrollStudentPanel(): JSX.Element {
         {!query.trim() && (
           <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <Search className="h-4 w-4" />
-            Recherchez un élève déjà présent dans la base (toutes années confondues) pour le réinscrire.
+            Recherchez un élève déjà présent dans la base (toutes années confondues) pour le
+            réinscrire.
           </p>
         )}
 
-        {query.trim() && isSearching && <p className="py-6 text-sm text-muted-foreground">Recherche...</p>}
+        {query.trim() && isSearching && (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-md border border-border px-4 py-2.5"
+              >
+                <Skeleton className="h-9 w-9 rounded-full" />
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Skeleton className="h-3.5 w-40" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {query.trim() && !isSearching && results.length === 0 && (
-          <p className="py-6 text-sm text-muted-foreground">Aucun élève ne correspond à cette recherche.</p>
+          <p className="py-6 text-sm text-muted-foreground">
+            Aucun élève ne correspond à cette recherche.
+          </p>
         )}
 
         {results.length > 0 && (
@@ -204,28 +228,24 @@ export function ReenrollStudentPanel(): JSX.Element {
                   className="flex items-center justify-between gap-3 rounded-md border border-border px-4 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted"
                 >
                   <div className="flex items-center gap-3">
-                    {student.photoPath ? (
-                      <img
-                        src={student.photoPath}
-                        alt=""
-                        className="h-9 w-9 rounded-full border border-border object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-input bg-muted">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
+                    <StudentAvatar
+                      firstName={student.firstName}
+                      lastName={student.lastName}
+                      photoPath={student.photoPath}
+                    />
                     <div>
                       <p className="text-sm font-medium text-foreground">
                         {student.lastName} {student.firstName}
                       </p>
-                      <p className="font-mono text-xs text-muted-foreground">{formatMatricule(student.matricule)}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {formatMatricule(student.matricule)}
+                      </p>
                     </div>
                   </div>
                   {currentClass ? (
                     <Badge variant="warning">Déjà réinscrit(e) — {currentClass}</Badge>
                   ) : (
-                    <Badge variant="secondary">Sélectionner</Badge>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                   )}
                 </button>
               )

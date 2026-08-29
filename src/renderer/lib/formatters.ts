@@ -50,7 +50,10 @@ export function formatDateTimeShort(date: string | Date): string {
  * Ex: `formatCFACompact(15400000)` → `"15,4 M F CFA"`
  */
 export function formatCFACompact(amount: number): string {
-  const compact = new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(amount)
+  const compact = new Intl.NumberFormat('fr-FR', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(amount)
   return `${compact} F CFA`
 }
 

@@ -18,6 +18,7 @@ import { FormField } from '@renderer/components/forms/FormField'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useToast } from '@renderer/lib/use-toast'
 import { formatDate } from '@renderer/lib/formatters'
+import { validateSchoolYearLabel } from '@shared/validators/school-year'
 import type { SchoolYear } from '@shared/types/settings.types'
 
 export function SchoolYearPage(): JSX.Element {
@@ -39,6 +40,13 @@ export function SchoolYearPage(): JSX.Element {
   const handleCreate = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
     setCreateError(null)
+
+    const validation = validateSchoolYearLabel(label)
+    if (!validation.valid) {
+      setCreateError(validation.error ?? 'Libellé invalide.')
+      return
+    }
+
     setSubmitting(true)
     try {
       await createSchoolYear(label)
@@ -65,10 +73,19 @@ export function SchoolYearPage(): JSX.Element {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          L'année scolaire active détermine le rattachement par défaut des nouvelles inscriptions
-          et opérations de caisse. Le changement d'année ne masque pas les données précédentes.
+          L’année scolaire active détermine le rattachement par défaut des nouvelles inscriptions et
+          opérations de caisse. Le changement d’année ne masque pas les données précédentes.
         </p>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open)
+            if (!open) {
+              setLabel('')
+              setCreateError(null)
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="shrink-0 gap-1.5">
               <CalendarPlus className="h-4 w-4" />
@@ -78,14 +95,22 @@ export function SchoolYearPage(): JSX.Element {
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Nouvelle année scolaire</DialogTitle>
-              <DialogDescription>Ex: 2027-2028.</DialogDescription>
+              <DialogDescription>Format attendu : AAAA-AAAA, ex: 2027-2028.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <FormField label="Libellé" htmlFor="year-label" required error={createError ?? undefined}>
+              <FormField
+                label="Libellé"
+                htmlFor="year-label"
+                required
+                error={createError ?? undefined}
+              >
                 <Input
                   id="year-label"
                   value={label}
-                  onChange={(e) => setLabel(e.target.value)}
+                  onChange={(e) => {
+                    setLabel(e.target.value)
+                    if (createError) setCreateError(null)
+                  }}
                   placeholder="2027-2028"
                   autoFocus
                   required

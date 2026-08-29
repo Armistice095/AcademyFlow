@@ -9,11 +9,20 @@ import {
   tuitionInstallments,
   tuitionSchedules
 } from '@main/database/schema'
-import type { ArrearsStudent, TuitionAccount, TuitionAccountLine } from '@shared/types/transaction.types'
+import { getEnrollmentHistoryStatus } from './student.service'
+import type {
+  ArrearsStudent,
+  TuitionAccount,
+  TuitionAccountLine
+} from '@shared/types/transaction.types'
 
 function getCurrentSchoolYearId(): string | null {
   const db = getDb()
-  const year = db.select({ id: schoolYears.id }).from(schoolYears).where(eq(schoolYears.isCurrent, true)).get()
+  const year = db
+    .select({ id: schoolYears.id })
+    .from(schoolYears)
+    .where(eq(schoolYears.isCurrent, true))
+    .get()
   return year?.id ?? null
 }
 
@@ -33,7 +42,9 @@ function computeAccount(studentId: string, classId: string, schoolYearId: string
   const schedule = db
     .select({ id: tuitionSchedules.id })
     .from(tuitionSchedules)
-    .where(and(eq(tuitionSchedules.classId, classId), eq(tuitionSchedules.schoolYearId, schoolYearId)))
+    .where(
+      and(eq(tuitionSchedules.classId, classId), eq(tuitionSchedules.schoolYearId, schoolYearId))
+    )
     .get()
 
   if (!schedule) {
@@ -47,39 +58,60 @@ function computeAccount(studentId: string, classId: string, schoolYearId: string
     .orderBy(tuitionInstallments.sortOrder)
     .all()
 
+  // Statut de l'élève pour CETTE année scolaire précise (pas son statut
+  // "actuel" global) — détermine quelles tranches ciblées lui sont dues.
+  const historyStatus = getEnrollmentHistoryStatus(studentId, schoolYearId)
+
   const today = new Date().toISOString().slice(0, 10)
 
-  const lines: TuitionAccountLine[] = installmentRows.map((installment) => {
-    const payments = db
-      .select({ amount: transactions.amount })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.installmentId, installment.id),
-          eq(transactions.studentId, studentId),
-          eq(transactions.type, 'entry'),
-          eq(transactions.status, 'validated')
+  const lines: TuitionAccountLine[] = installmentRows
+    .map((installment) => {
+      const payments = db
+        .select({ amount: transactions.amount })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.installmentId, installment.id),
+            eq(transactions.studentId, studentId),
+            eq(transactions.type, 'entry'),
+            eq(transactions.status, 'validated')
+          )
         )
-      )
-      .all()
+        .all()
 
-    const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0)
-    const isLate = installment.dueDate < today && paidAmount < installment.amount
+      const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0)
+      const isLate = installment.dueDate < today && paidAmount < installment.amount
+      const appliesTo = installment.appliesTo as TuitionAccountLine['appliesTo']
 
-    return {
-      installmentId: installment.id,
-      label: installment.label,
-      dueDate: installment.dueDate,
-      expectedAmount: installment.amount,
-      paidAmount,
-      status: isLate ? 'en_arriere' : 'a_jour'
-    }
-  })
+      // Une tranche ne concernant pas le statut actuel de l'élève est
+      // exclue du compte — SAUF si un paiement y a déjà été enregistré :
+      // dans ce cas on la garde toujours visible, pour ne jamais faire
+      // disparaître un paiement déjà effectué (sécurité comptable).
+      const isRelevant = appliesTo === 'tous' || appliesTo === historyStatus || paidAmount > 0
+      if (!isRelevant) return null
+
+      return {
+        installmentId: installment.id,
+        label: installment.label,
+        dueDate: installment.dueDate,
+        expectedAmount: installment.amount,
+        paidAmount,
+        status: isLate ? 'en_arriere' : 'a_jour',
+        appliesTo
+      } satisfies TuitionAccountLine
+    })
+    .filter((line): line is TuitionAccountLine => line !== null)
 
   const totalExpected = lines.reduce((sum, l) => sum + l.expectedAmount, 0)
   const totalPaid = lines.reduce((sum, l) => sum + l.paidAmount, 0)
 
-  return { studentId, installments: lines, totalExpected, totalPaid, balance: totalExpected - totalPaid }
+  return {
+    studentId,
+    installments: lines,
+    totalExpected,
+    totalPaid,
+    balance: totalExpected - totalPaid
+  }
 }
 
 /** Compte de scolarité détaillé d'un élève, pour l'année scolaire en cours (F-020). */
@@ -122,7 +154,9 @@ export function getArrearsStudents(): ArrearsStudent[] {
 
   for (const row of activeEnrollments) {
     const account = computeAccount(row.studentId, row.classId, schoolYearId)
-    const lateInstallmentsCount = account.installments.filter((l) => l.status === 'en_arriere').length
+    const lateInstallmentsCount = account.installments.filter(
+      (l) => l.status === 'en_arriere'
+    ).length
     if (lateInstallmentsCount > 0) {
       result.push({
         ...account,

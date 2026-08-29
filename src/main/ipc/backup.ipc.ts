@@ -12,9 +12,12 @@ export function registerBackupIpcHandlers(): void {
     return backupService.getBackupStatus()
   })
 
-  ipcMain.handle(IPC_CHANNELS.backup.updateSettings, async (_event, data: UpdateBackupSettingsDTO) => {
-    return backupService.updateBackupSettings(data)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.backup.updateSettings,
+    async (_event, data: UpdateBackupSettingsDTO) => {
+      return backupService.updateBackupSettings(data)
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.backup.connectGoogleAccount, async () => {
     return backupService.connectGoogleAccount()

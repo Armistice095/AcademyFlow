@@ -10,8 +10,8 @@ export interface ImageUploadProps {
   hint?: string
   value: string | null
   onChange: (dataUrl: string | null) => void
-  /** Ratio d'affichage de la zone de prévisualisation. */
-  shape?: 'square' | 'wide'
+  /** Ratio d'affichage de la zone de prévisualisation. 'avatar' : aperçu circulaire (photo de personne). */
+  shape?: 'square' | 'wide' | 'avatar'
 }
 
 /** Upload d'image avec prévisualisation — lit le fichier en base64 côté renderer (pas d'IPC nécessaire). */
@@ -52,18 +52,32 @@ export function ImageUpload({
       <div className="flex items-center gap-3">
         <div
           className={cn(
-            'flex items-center justify-center overflow-hidden rounded-lg border border-dashed border-input bg-muted',
-            shape === 'square' ? 'h-20 w-20' : 'h-20 w-40'
+            'flex items-center justify-center overflow-hidden border border-dashed border-input bg-muted',
+            shape === 'avatar' ? 'h-20 w-20 rounded-full' : 'rounded-lg',
+            shape === 'square' && 'h-20 w-20',
+            shape === 'wide' && 'h-20 w-40'
           )}
         >
           {value ? (
-            <img src={value} alt={label} className="h-full w-full object-contain" />
+            <img
+              src={value}
+              alt={label}
+              className={cn(
+                'h-full w-full',
+                shape === 'avatar' ? 'object-cover' : 'object-contain'
+              )}
+            />
           ) : (
             <ImagePlus className="h-6 w-6 text-muted-foreground" />
           )}
         </div>
         <div className="flex flex-col gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+          >
             {value ? 'Changer' : 'Choisir un fichier'}
           </Button>
           {value && (
@@ -79,7 +93,13 @@ export function ImageUpload({
             </Button>
           )}
         </div>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
       </div>
       {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}

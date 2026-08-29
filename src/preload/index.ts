@@ -48,7 +48,13 @@ const api: AcademyFlowAPI = {
     getStudentAccount: (studentId) =>
       ipcRenderer.invoke(IPC_CHANNELS.cashbox.getStudentAccount, studentId),
     listArrears: () => ipcRenderer.invoke(IPC_CHANNELS.cashbox.listArrears),
-    getReport: (from, to) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReport, from, to),
+    getReportV2: (filters) => ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportV2, filters),
+    getTypeReport: (filters, type) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cashbox.getTypeReport, filters, type),
+    getReportByClass: (filters) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportByClass, filters),
+    getReportByCashier: (filters) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportByCashier, filters),
     getReceipt: (transactionId) =>
       ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReceipt, transactionId),
     reprintReceipt: (transactionId) =>
@@ -68,7 +74,13 @@ const api: AcademyFlowAPI = {
     getSalaryStatus: (month, year) =>
       ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryStatus, month, year),
     getSalaryHistory: (employeeId) =>
-      ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryHistory, employeeId)
+      ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryHistory, employeeId),
+    grantAdvance: (data) => ipcRenderer.invoke(IPC_CHANNELS.personnel.grantAdvance, data),
+    cancelAdvance: (id) => ipcRenderer.invoke(IPC_CHANNELS.personnel.cancelAdvance, id),
+    listAdvances: (employeeId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.personnel.listAdvances, employeeId),
+    getPendingAdvance: (employeeId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.personnel.getPendingAdvance, employeeId)
   },
 
   settings: {
@@ -78,6 +90,9 @@ const api: AcademyFlowAPI = {
     setCurrentSchoolYear: (yearId) =>
       ipcRenderer.invoke(IPC_CHANNELS.settings.setCurrentSchoolYear, yearId),
     getClasses: () => ipcRenderer.invoke(IPC_CHANNELS.settings.getClasses),
+    createClass: (name) => ipcRenderer.invoke(IPC_CHANNELS.settings.createClass, name),
+    updateClass: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.settings.updateClass, id, name),
+    deleteClass: (id) => ipcRenderer.invoke(IPC_CHANNELS.settings.deleteClass, id),
     getTuitionSchedule: (classId, yearId) =>
       ipcRenderer.invoke(IPC_CHANNELS.settings.getTuitionSchedule, classId, yearId),
     saveTuitionSchedule: (data) =>
@@ -106,6 +121,8 @@ const api: AcademyFlowAPI = {
     testConnection: () => ipcRenderer.invoke(IPC_CHANNELS.printer.testConnection),
     openPdf: (base64, fileName) =>
       ipcRenderer.invoke(IPC_CHANNELS.printer.openPdf, base64, fileName),
+    openFile: (base64, fileName) =>
+      ipcRenderer.invoke(IPC_CHANNELS.printer.openFile, base64, fileName),
     getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.printer.getConfig),
     updateConfig: (data) => ipcRenderer.invoke(IPC_CHANNELS.printer.updateConfig, data),
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.printer.getStatus)
@@ -116,7 +133,8 @@ const api: AcademyFlowAPI = {
     getLastBackup: () => ipcRenderer.invoke(IPC_CHANNELS.backup.getLastBackup),
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.backup.getStatus),
     listBackups: () => ipcRenderer.invoke(IPC_CHANNELS.backup.listBackups),
-    restoreFromCloud: (backupId) => ipcRenderer.invoke(IPC_CHANNELS.backup.restoreFromCloud, backupId),
+    restoreFromCloud: (backupId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.backup.restoreFromCloud, backupId),
     connectGoogleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.backup.connectGoogleAccount),
     disconnectGoogleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.backup.disconnectGoogleAccount),
     updateSettings: (data) => ipcRenderer.invoke(IPC_CHANNELS.backup.updateSettings, data)
@@ -124,6 +142,13 @@ const api: AcademyFlowAPI = {
 
   dashboard: {
     getStats: () => ipcRenderer.invoke(IPC_CHANNELS.dashboard.getStats)
+  },
+
+  license: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.license.getStatus),
+    activate: (dto) => ipcRenderer.invoke(IPC_CHANNELS.license.activate, dto),
+    resync: () => ipcRenderer.invoke(IPC_CHANNELS.license.resync),
+    markOnboardingCompleted: () => ipcRenderer.invoke(IPC_CHANNELS.license.markOnboardingCompleted)
   }
 }
 

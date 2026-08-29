@@ -1,8 +1,10 @@
 import * as React from 'react'
 import { cn } from '@renderer/lib/utils'
 
-export interface MoneyInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
+export interface MoneyInputProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange' | 'type'
+> {
   value: number
   onChange: (value: number) => void
 }

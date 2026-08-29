@@ -38,7 +38,16 @@ const styles = StyleSheet.create({
   amountWords: { fontSize: 8, marginTop: 4, textAlign: 'center', fontStyle: 'italic' },
   footer: { marginTop: 20, flexDirection: 'row', justifyContent: 'space-between' },
   footerBlock: { alignItems: 'center', width: 130 },
-  footerLine: { marginTop: 24, borderTopWidth: 0.5, borderTopColor: '#94a3b8', width: '100%', textAlign: 'center', paddingTop: 2, fontSize: 7, color: '#64748b' }
+  footerLine: {
+    marginTop: 24,
+    borderTopWidth: 0.5,
+    borderTopColor: '#94a3b8',
+    width: '100%',
+    textAlign: 'center',
+    paddingTop: 2,
+    fontSize: 7,
+    color: '#64748b'
+  }
 })
 
 export interface ReceiptPDFProps {
@@ -86,7 +95,9 @@ export function ReceiptPDF({
         )}
         <View style={styles.row}>
           <Text style={styles.label}>Type de frais</Text>
-          <Text style={styles.value}>{CASH_CATEGORY_LABELS[transaction.category as CashCategory]}</Text>
+          <Text style={styles.value}>
+            {CASH_CATEGORY_LABELS[transaction.category as CashCategory]}
+          </Text>
         </View>
         {installmentLabel && (
           <View style={styles.row}>

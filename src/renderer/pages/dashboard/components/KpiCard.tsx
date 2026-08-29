@@ -22,6 +22,14 @@ export interface KpiCardProps {
    * qui n'est pas une tendance et ne doit donc pas ressembler à une baisse.
    */
   trendVariant?: 'change' | 'status'
+  /**
+   * Classe de couleur pour la puce en mode 'status' (ex: 'bg-accent-500'),
+   * quand la couleur doit refléter une catégorie (genre, statut) plutôt
+   * qu'une tonalité positive/négative/neutre.
+   */
+  trendDotClassName?: string
+  /** Délai (ms) avant l'animation d'entrée — pour un effet en cascade sur la rangée de cartes KPI. */
+  animationDelayMs?: number
 }
 
 const TONE_CLASSES: Record<KpiTone, string> = {
@@ -45,23 +53,48 @@ export function KpiCard({
   trendLabel,
   trendTone = 'neutral',
   trendDirection = 'flat',
-  trendVariant = 'change'
+  trendVariant = 'change',
+  trendDotClassName,
+  animationDelayMs = 0
 }: KpiCardProps): JSX.Element {
-  const TrendIcon = trendDirection === 'up' ? ArrowUpRight : trendDirection === 'down' ? ArrowDownRight : Minus
+  const TrendIcon =
+    trendDirection === 'up' ? ArrowUpRight : trendDirection === 'down' ? ArrowDownRight : Minus
 
   return (
-    <Card className="p-5 transition-shadow hover:shadow-md">
+    <Card
+      className="animate-in fade-in-0 slide-in-from-bottom-2 p-5 shadow-sm duration-500 fill-mode-backwards transition-all hover:-translate-y-0.5 hover:shadow-md"
+      style={{ animationDelay: `${animationDelayMs}ms` }}
+    >
       <div className="flex items-start gap-3.5">
-        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', iconClassName)}>
+        <div
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+            iconClassName
+          )}
+        >
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-muted-foreground">{label}</p>
-          <p className="mt-0.5 truncate font-mono text-xl font-semibold tracking-tight text-foreground">{value}</p>
+          <p className="mt-0.5 truncate font-mono text-xl font-semibold tracking-tight text-foreground">
+            {value}
+          </p>
           {trendLabel && (
-            <p className={cn('mt-1 flex items-center gap-1.5 text-xs font-medium', TONE_CLASSES[trendTone])}>
+            <p
+              className={cn(
+                'mt-1 flex items-center gap-1.5 text-xs font-medium',
+                trendVariant === 'status' && trendDotClassName
+                  ? 'text-muted-foreground'
+                  : TONE_CLASSES[trendTone]
+              )}
+            >
               {trendVariant === 'status' ? (
-                <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TONE_DOT_CLASSES[trendTone])} />
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    trendDotClassName ?? TONE_DOT_CLASSES[trendTone]
+                  )}
+                />
               ) : (
                 <TrendIcon className="h-3.5 w-3.5 shrink-0" />
               )}

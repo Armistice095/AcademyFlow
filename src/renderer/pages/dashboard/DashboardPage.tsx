@@ -23,6 +23,7 @@ import {
 import { EChart, type EChartsOption } from '@renderer/components/charts/EChart'
 import { KpiCard, type KpiTone } from './components/KpiCard'
 import { RecoveryGauge } from './components/RecoveryGauge'
+import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { buildTooltipHtml } from './components/echarts-tooltip'
 import { CASH_FLOW_COLORS, CHART_HEX } from './components/chart-colors'
 import { getActivityMeta, getActivityAmountSign, getAlertMeta } from './components/activity-meta'
@@ -113,7 +114,10 @@ export function DashboardPage(): JSX.Element {
             items.map((item) => ({
               label: String(item.seriesName ?? ''),
               value: Number(item.value ?? 0),
-              color: item.seriesName === 'Encaissements' ? CASH_FLOW_COLORS.entries : CASH_FLOW_COLORS.exits
+              color:
+                item.seriesName === 'Encaissements'
+                  ? CASH_FLOW_COLORS.entries
+                  : CASH_FLOW_COLORS.exits
             }))
           )
         }
@@ -181,11 +185,16 @@ export function DashboardPage(): JSX.Element {
 
   if (error && !stats) {
     return (
-      <Card>
+      <Card className="animate-in fade-in-0 zoom-in-95 duration-300">
         <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
           <p className="text-sm text-muted-foreground">Impossible de charger le tableau de bord.</p>
           <p className="text-xs text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void refresh()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 transition-transform active:scale-95"
+            onClick={() => void refresh()}
+          >
             <RefreshCw className="h-3.5 w-3.5" />
             Réessayer
           </Button>
@@ -195,7 +204,7 @@ export function DashboardPage(): JSX.Element {
   }
 
   if (!stats || !cashEvolutionOption || !categoryBreakdownOption) {
-    return <p className="py-14 text-center text-sm text-muted-foreground">Chargement du tableau de bord…</p>
+    return <DashboardSkeleton />
   }
 
   const studentsTrend = describeTrend(stats.kpis.studentsEnrolled)
@@ -209,7 +218,7 @@ export function DashboardPage(): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       {isLoading && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="flex animate-in fade-in-0 items-center gap-1.5 text-xs text-muted-foreground duration-300">
           <RefreshCw className="h-3 w-3 animate-spin" />
           Actualisation…
         </div>
@@ -225,6 +234,7 @@ export function DashboardPage(): JSX.Element {
           trendLabel={studentsTrend.label}
           trendTone={studentsTrend.tone}
           trendDirection={studentsTrend.direction}
+          animationDelayMs={0}
         />
         <KpiCard
           icon={Wallet}
@@ -234,6 +244,7 @@ export function DashboardPage(): JSX.Element {
           trendLabel={entriesTrend.label}
           trendTone={entriesTrend.tone}
           trendDirection={entriesTrend.direction}
+          animationDelayMs={60}
         />
         <KpiCard
           icon={Receipt}
@@ -243,6 +254,7 @@ export function DashboardPage(): JSX.Element {
           trendLabel={exitsTrend.label}
           trendTone={exitsTrend.tone}
           trendDirection={exitsTrend.direction}
+          animationDelayMs={120}
         />
         <KpiCard
           icon={Users}
@@ -252,6 +264,7 @@ export function DashboardPage(): JSX.Element {
           trendLabel={personnelTrend.label}
           trendTone={personnelTrend.tone}
           trendDirection={personnelTrend.direction}
+          animationDelayMs={180}
         />
         <KpiCard
           icon={Landmark}
@@ -261,6 +274,7 @@ export function DashboardPage(): JSX.Element {
           trendLabel="Mise à jour à l'instant"
           trendTone="positive"
           trendVariant="status"
+          animationDelayMs={240}
         />
       </div>
 
@@ -275,17 +289,20 @@ export function DashboardPage(): JSX.Element {
       */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Évolution des mouvements de caisse */}
-        <Card className="flex flex-col lg:col-span-5 lg:row-start-1">
+        <Card
+          className="flex flex-col animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-5 lg:row-start-1"
+          style={{ animationDelay: '150ms' }}
+        >
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-0">
             <CardTitle className="text-base">Évolution des mouvements de caisse</CardTitle>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+                  className="group flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
                 >
                   {cashEvolutionMonths} derniers mois
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="max-h-64 overflow-y-auto">
@@ -306,11 +323,17 @@ export function DashboardPage(): JSX.Element {
             {/* Légende des séries */}
             <div className="mb-2 flex items-center gap-5 px-6">
               <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CASH_FLOW_COLORS.entries }} />
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: CASH_FLOW_COLORS.entries }}
+                />
                 Encaissements
               </p>
               <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CASH_FLOW_COLORS.exits }} />
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: CASH_FLOW_COLORS.exits }}
+                />
                 Dépenses
               </p>
             </div>
@@ -322,14 +345,19 @@ export function DashboardPage(): JSX.Element {
         </Card>
 
         {/* Répartition des encaissements */}
-        <Card className="lg:col-span-4 lg:row-start-1">
+        <Card
+          className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-4 lg:row-start-1"
+          style={{ animationDelay: '210ms' }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Répartition des encaissements</CardTitle>
             <p className="text-sm text-muted-foreground">Encaissements totaux</p>
           </CardHeader>
           <CardContent>
             {stats.categoryBreakdown.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Aucun encaissement ce mois-ci.</p>
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Aucun encaissement ce mois-ci.
+              </p>
             ) : (
               <>
                 <div className="relative mx-auto" style={{ width: 220, height: 220 }}>
@@ -371,7 +399,10 @@ export function DashboardPage(): JSX.Element {
         </Card>
 
         {/* Activités récentes — étirée sur la hauteur de la rangée 1 */}
-        <Card className="flex flex-col lg:col-span-3 lg:row-start-1">
+        <Card
+          className="flex flex-col animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-3 lg:row-start-1"
+          style={{ animationDelay: '270ms' }}
+        >
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base">Activités récentes</CardTitle>
             <Link to="/cashbox" className="text-xs font-medium text-primary hover:underline">
@@ -380,21 +411,30 @@ export function DashboardPage(): JSX.Element {
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-between gap-4">
             {stats.recentActivity.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Aucune activité récente.</p>
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Aucune activité récente.
+              </p>
             ) : (
               stats.recentActivity.map((item) => {
                 const meta = getActivityMeta(item.kind)
                 const Icon = meta.icon
                 const sign = getActivityAmountSign(item.kind)
                 return (
-                  <div key={item.id} className="flex items-start gap-3">
-                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${meta.className}`}>
+                  <div
+                    key={item.id}
+                    className="-mx-1.5 flex items-start gap-3 rounded-lg p-1.5 transition-colors hover:bg-secondary/50"
+                  >
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${meta.className}`}
+                    >
                       <Icon className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground">{item.title}</p>
                       <p className="truncate text-xs text-muted-foreground">{item.description}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDateTimeShort(item.createdAt)}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {formatDateTimeShort(item.createdAt)}
+                      </p>
                     </div>
                     {item.amount !== null && sign !== null && (
                       <span
@@ -414,7 +454,10 @@ export function DashboardPage(): JSX.Element {
         </Card>
 
         {/* Statistiques des élèves */}
-        <Card className="flex flex-col lg:col-span-3 lg:row-start-2">
+        <Card
+          className="flex flex-col animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-3 lg:row-start-2"
+          style={{ animationDelay: '330ms' }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Statistiques des élèves</CardTitle>
             <p className="text-sm text-muted-foreground">Par classe</p>
@@ -442,10 +485,10 @@ export function DashboardPage(): JSX.Element {
                 </div>
                 <Link
                   to="/students"
-                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  className="group flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                 >
                   Voir toutes les classes
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </>
             )}
@@ -453,10 +496,13 @@ export function DashboardPage(): JSX.Element {
         </Card>
 
         {/* Taux de recouvrement */}
-        <Card className="lg:col-span-3 lg:row-start-2">
+        <Card
+          className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-3 lg:row-start-2"
+          style={{ animationDelay: '390ms' }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Taux de recouvrement</CardTitle>
-            <p className="text-sm text-muted-foreground">Sur toute l'année</p>
+            <p className="text-sm text-muted-foreground">Sur toute l’année</p>
           </CardHeader>
           <CardContent className="flex justify-center pb-6">
             <RecoveryGauge
@@ -468,14 +514,19 @@ export function DashboardPage(): JSX.Element {
         </Card>
 
         {/* Top des dépenses */}
-        <Card className="lg:col-span-3 lg:row-start-2">
+        <Card
+          className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-3 lg:row-start-2"
+          style={{ animationDelay: '450ms' }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Top des dépenses</CardTitle>
             <p className="text-sm text-muted-foreground">Ce mois</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {stats.topExpenses.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Aucune dépense ce mois-ci.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Aucune dépense ce mois-ci.
+              </p>
             ) : (
               stats.topExpenses.map((item, index) => {
                 const barPct = (item.amount / maxTopExpense) * 100
@@ -490,43 +541,55 @@ export function DashboardPage(): JSX.Element {
                         {formatCFA(item.amount)}
                       </span>
                     </div>
-                    <div className="h-1 rounded-full bg-destructive" style={{ width: `${Math.max(4, barPct)}%` }} />
+                    <div
+                      className="h-1 rounded-full bg-destructive"
+                      style={{ width: `${Math.max(4, barPct)}%` }}
+                    />
                   </div>
                 )
               })
             )}
             <Link
               to="/cashbox/reports"
-              className="mt-1 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="group mt-1 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
               Voir tous les détails
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </CardContent>
         </Card>
 
         {/* Alertes et rappels — étirée sur la hauteur de la rangée 2 */}
-        <Card className="flex flex-col lg:col-span-3 lg:row-start-2">
+        <Card
+          className="flex flex-col animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-backwards transition-shadow hover:shadow-md lg:col-span-3 lg:row-start-2"
+          style={{ animationDelay: '510ms' }}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Alertes et rappels</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col justify-center gap-1">
             {stats.alerts.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Aucune alerte — tout est à jour.</p>
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Aucune alerte — tout est à jour.
+              </p>
             ) : (
               stats.alerts.map((alert) => {
                 const meta = getAlertMeta(alert.severity)
                 const Icon = meta.icon
                 const content = (
                   <div className="flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-secondary">
-                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${meta.className}`}>
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${meta.className}`}
+                    >
                       <Icon className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground">{alert.title}</p>
                       <p className="text-xs text-muted-foreground">{alert.description}</p>
                     </div>
-                    {alert.link && <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />}
+                    {alert.link && (
+                      <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
                   </div>
                 )
                 return alert.link ? (

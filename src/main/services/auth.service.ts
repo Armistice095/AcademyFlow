@@ -112,7 +112,9 @@ export function changePassword(userId: string, oldPassword: string, newPassword:
     throw new Error('Mot de passe actuel incorrect.')
   }
   if (newPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new Error(`Le nouveau mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`)
+    throw new Error(
+      `Le nouveau mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`
+    )
   }
 
   const passwordHash = bcrypt.hashSync(newPassword, 10)
@@ -129,15 +131,27 @@ export interface CreateUserInput {
   username: string
   password: string
   fullName: string
+  /**
+   * `true` uniquement pour le compte administrateur créé lors de
+   * l'onboarding (étape 3/6) : l'utilisateur vient de choisir lui-même son
+   * mot de passe dans l'assistant, lui redemander de le changer dès la
+   * première connexion serait une friction sans valeur ajoutée. Toujours
+   * `false`/omis pour les comptes créés depuis Paramètres > Utilisateurs.
+   */
+  skipMustChangePassword?: boolean
 }
 
-/** Crée un nouvel utilisateur (Phase 9.4, onglet « Utilisateurs » des Paramètres). */
+/** Crée un nouvel utilisateur (Phase 9.4, onglet « Utilisateurs » des Paramètres, et étape 3 de l'onboarding). */
 export function createUser(data: CreateUserInput): AuthUser {
   const db = getDb()
 
-  const existing = db.select({ id: users.id }).from(users).where(eq(users.username, data.username)).get()
+  const existing = db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, data.username))
+    .get()
   if (existing) {
-    throw new Error('Ce nom d\'utilisateur est déjà utilisé.')
+    throw new Error("Ce nom d'utilisateur est déjà utilisé.")
   }
   if (data.password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(`Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`)
@@ -145,6 +159,7 @@ export function createUser(data: CreateUserInput): AuthUser {
 
   const id = generateId()
   const passwordHash = bcrypt.hashSync(data.password, 10)
+  const mustChangePassword = !data.skipMustChangePassword
 
   db.insert(users)
     .values({
@@ -152,11 +167,11 @@ export function createUser(data: CreateUserInput): AuthUser {
       username: data.username,
       passwordHash,
       fullName: data.fullName,
-      mustChangePassword: true
+      mustChangePassword
     })
     .run()
 
-  return { id, username: data.username, fullName: data.fullName, mustChangePassword: true }
+  return { id, username: data.username, fullName: data.fullName, mustChangePassword }
 }
 
 // ---------------------------------------------------------------------------
@@ -194,9 +209,13 @@ export function updateUser(userId: string, data: UpdateUserDTO): UserAccount {
     if (!trimmed) {
       throw new Error("Le nom d'utilisateur ne peut pas être vide.")
     }
-    const conflict = db.select({ id: users.id }).from(users).where(eq(users.username, trimmed)).get()
+    const conflict = db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, trimmed))
+      .get()
     if (conflict) {
-      throw new Error('Ce nom d\'utilisateur est déjà utilisé.')
+      throw new Error("Ce nom d'utilisateur est déjà utilisé.")
     }
   }
 
@@ -230,7 +249,11 @@ export function setUserActive(userId: string, isActive: boolean): UserAccount {
   }
 
   if (!isActive) {
-    const activeCount = db.select({ id: users.id }).from(users).where(eq(users.isActive, true)).all().length
+    const activeCount = db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.isActive, true))
+      .all().length
     if (activeCount <= 1 && existing.isActive) {
       throw new Error('Impossible de désactiver le dernier compte actif.')
     }
@@ -267,10 +290,7 @@ export function resetPassword(userId: string): { temporaryPassword: string } {
   const temporaryPassword = generateTemporaryPassword()
   const passwordHash = bcrypt.hashSync(temporaryPassword, 10)
 
-  db.update(users)
-    .set({ passwordHash, mustChangePassword: true })
-    .where(eq(users.id, userId))
-    .run()
+  db.update(users).set({ passwordHash, mustChangePassword: true }).where(eq(users.id, userId)).run()
 
   logAction({ userId, action: 'reset_password', entityType: 'user', entityId: userId })
 

@@ -14,7 +14,12 @@ export interface ClassListPDFProps {
 const COL = { num: 28, matricule: 75, name: 150, gender: 45, dob: 85 }
 
 /** Liste de classe imprimable (F-011, export de F-008). */
-export function ClassListPDF({ students, className, schoolYearLabel, schoolInfo }: ClassListPDFProps): JSX.Element {
+export function ClassListPDF({
+  students,
+  className,
+  schoolYearLabel,
+  schoolInfo
+}: ClassListPDFProps): JSX.Element {
   return (
     <Document title={`Liste de classe - ${className}`}>
       <Page size="A4" style={pdfStyles.page}>
@@ -35,14 +40,18 @@ export function ClassListPDF({ students, className, schoolYearLabel, schoolInfo 
           {students.map((student, index) => (
             <View style={pdfStyles.tableRow} key={student.id} wrap={false}>
               <Text style={[pdfStyles.tableCell, { width: COL.num }]}>{index + 1}</Text>
-              <Text style={[pdfStyles.tableCell, { width: COL.matricule }]}>{student.matricule}</Text>
+              <Text style={[pdfStyles.tableCell, { width: COL.matricule }]}>
+                {student.matricule}
+              </Text>
               <Text style={[pdfStyles.tableCell, { width: COL.name }]}>
                 {student.lastName} {student.firstName}
               </Text>
               <Text style={[pdfStyles.tableCell, { width: COL.gender }]}>
                 {student.gender === 'M' ? 'M' : 'F'}
               </Text>
-              <Text style={[pdfStyles.tableCell, { width: COL.dob }]}>{formatDate(student.dateOfBirth)}</Text>
+              <Text style={[pdfStyles.tableCell, { width: COL.dob }]}>
+                {formatDate(student.dateOfBirth)}
+              </Text>
             </View>
           ))}
         </View>

@@ -14,6 +14,7 @@ export const CASH_ENTRY_CATEGORIES = [
 export const CASH_EXIT_CATEGORIES = [
   'depense_quotidienne',
   'salaire',
+  'avance_salaire',
   'achat_fournitures',
   'charge_diverse'
 ] as const
@@ -31,6 +32,7 @@ export const CASH_CATEGORY_LABELS: Record<CashCategory, string> = {
   autre_recette: 'Autre recette',
   depense_quotidienne: 'Dépense quotidienne',
   salaire: 'Salaire',
+  avance_salaire: 'Avance sur salaire',
   achat_fournitures: 'Achat de fournitures',
   charge_diverse: 'Charge diverse'
 }

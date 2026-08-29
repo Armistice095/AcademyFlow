@@ -31,8 +31,48 @@ const RULES: BreadcrumbRule[] = [
     crumbs: [{ label: 'Caisse', path: '/cashbox' }, { label: 'Rapports' }]
   },
   {
+    test: (p) => p === '/cashbox/reports/recettes',
+    crumbs: [
+      { label: 'Caisse', path: '/cashbox' },
+      { label: 'Rapports', path: '/cashbox/reports' },
+      { label: 'Recettes' }
+    ]
+  },
+  {
+    test: (p) => p === '/cashbox/reports/depenses',
+    crumbs: [
+      { label: 'Caisse', path: '/cashbox' },
+      { label: 'Rapports', path: '/cashbox/reports' },
+      { label: 'Dépenses' }
+    ]
+  },
+  {
+    test: (p) => p === '/cashbox/reports/impayes',
+    crumbs: [
+      { label: 'Caisse', path: '/cashbox' },
+      { label: 'Rapports', path: '/cashbox/reports' },
+      { label: 'Impayés' }
+    ]
+  },
+  {
+    test: (p) => p === '/cashbox/reports/par-classe',
+    crumbs: [
+      { label: 'Caisse', path: '/cashbox' },
+      { label: 'Rapports', path: '/cashbox/reports' },
+      { label: 'Par classe' }
+    ]
+  },
+  {
+    test: (p) => p === '/cashbox/reports/par-caissier',
+    crumbs: [
+      { label: 'Caisse', path: '/cashbox' },
+      { label: 'Rapports', path: '/cashbox/reports' },
+      { label: 'Par caissier' }
+    ]
+  },
+  {
     test: (p) => /^\/cashbox\/student\/[^/]+$/.test(p),
-    crumbs: [{ label: 'Caisse', path: '/cashbox' }, { label: 'Compte élève' }]
+    crumbs: [{ label: 'Caisse', path: '/cashbox' }, { label: 'Fiche financière' }]
   },
   {
     test: (p) => p === '/personnel',

@@ -57,8 +57,14 @@ export function RecoveryGauge({ rate, totalPaid, totalExpected }: RecoveryGaugeP
           stroke="var(--color-success)"
           strokeWidth={STROKE}
           strokeLinecap="round"
+          style={{ transition: 'd 0.7s ease-out' }}
         />
-        <text x={CX} y={CY - 6} textAnchor="middle" className="fill-foreground font-mono text-3xl font-bold">
+        <text
+          x={CX}
+          y={CY - 6}
+          textAnchor="middle"
+          className="fill-foreground font-mono text-3xl font-bold"
+        >
           {clampedRate.toFixed(1)}%
         </text>
       </svg>

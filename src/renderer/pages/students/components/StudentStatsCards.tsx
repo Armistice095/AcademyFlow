@@ -15,7 +15,8 @@ function describeTrend(trend: StudentStatsTrend): TrendDescription {
   }
   const pct = trend.growthPct
   const direction: TrendDescription['direction'] = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat'
-  const tone: KpiTone = direction === 'flat' ? 'neutral' : direction === 'up' ? 'positive' : 'negative'
+  const tone: KpiTone =
+    direction === 'flat' ? 'neutral' : direction === 'up' ? 'positive' : 'negative'
   return { label: `${Math.abs(pct).toFixed(0)}% vs année dernière`, tone, direction }
 }
 
@@ -72,18 +73,18 @@ export function StudentStatsCards({ stats }: StudentStatsCardsProps): JSX.Elemen
         iconClassName="bg-accent-500/10 text-accent-600"
         label="Effectif Garçons"
         value={male.count.toLocaleString('fr-FR')}
-        trendLabel={`${male.percentage.toFixed(0)}%`}
-        trendTone="neutral"
-        trendDirection="flat"
+        trendLabel={`${male.percentage.toFixed(0)}% de l'effectif`}
+        trendVariant="status"
+        trendDotClassName="bg-accent-500"
       />
       <KpiCard
         icon={UserRound}
         iconClassName="bg-primary-50 text-primary-600"
         label="Effectif Filles"
         value={female.count.toLocaleString('fr-FR')}
-        trendLabel={`${female.percentage.toFixed(0)}%`}
-        trendTone="neutral"
-        trendDirection="flat"
+        trendLabel={`${female.percentage.toFixed(0)}% de l'effectif`}
+        trendVariant="status"
+        trendDotClassName="bg-primary-500"
       />
     </div>
   )

@@ -56,7 +56,11 @@ function monthRange(year: number, monthIndex0: number): { from: string; toExclus
 }
 
 /** Décale une paire (année, mois index 0) de `delta` mois (peut être négatif). */
-function shiftMonth(year: number, monthIndex0: number, delta: number): { year: number; monthIndex0: number } {
+function shiftMonth(
+  year: number,
+  monthIndex0: number,
+  delta: number
+): { year: number; monthIndex0: number } {
   const total = year * 12 + monthIndex0 + delta
   return { year: Math.floor(total / 12), monthIndex0: ((total % 12) + 12) % 12 }
 }
@@ -118,11 +122,18 @@ function computeKpis(now: Date, schoolYear: CurrentSchoolYear | null): Dashboard
   // --- Entrées / sorties de caisse : mois courant vs mois précédent,
   // bornées à l'année scolaire en cours (cohérent avec le journal de caisse).
   const schoolYearId = schoolYear?.id ?? null
-  const txnConditions = [eq(transactions.status, 'validated'), gte(transactions.createdAt, previousMonth.from)]
+  const txnConditions = [
+    eq(transactions.status, 'validated'),
+    gte(transactions.createdAt, previousMonth.from)
+  ]
   if (schoolYearId) txnConditions.push(eq(transactions.schoolYearId, schoolYearId))
 
   const validatedTxns = db
-    .select({ type: transactions.type, amount: transactions.amount, createdAt: transactions.createdAt })
+    .select({
+      type: transactions.type,
+      amount: transactions.amount,
+      createdAt: transactions.createdAt
+    })
     .from(transactions)
     .where(and(...txnConditions))
     .all()
@@ -184,19 +195,29 @@ function computeCashEvolution(
   if (schoolYearId) conditions.push(eq(transactions.schoolYearId, schoolYearId))
 
   const rows = db
-    .select({ type: transactions.type, amount: transactions.amount, createdAt: transactions.createdAt })
+    .select({
+      type: transactions.type,
+      amount: transactions.amount,
+      createdAt: transactions.createdAt
+    })
     .from(transactions)
     .where(and(...conditions))
     .all()
 
   const points: MonthlyCashPoint[] = []
   for (let i = 0; i < monthsBack; i++) {
-    const { year, monthIndex0 } = shiftMonth(now.getFullYear(), now.getMonth(), -(monthsBack - 1) + i)
+    const { year, monthIndex0 } = shiftMonth(
+      now.getFullYear(),
+      now.getMonth(),
+      -(monthsBack - 1) + i
+    )
     const { from, toExclusiveEnd } = monthRange(year, monthIndex0)
     const inMonth = rows.filter((r) => r.createdAt >= from && r.createdAt <= toExclusiveEnd)
     points.push({
       month: `${year}-${pad(monthIndex0 + 1)}`,
-      label: MONTH_LABELS_FR[monthIndex0].slice(0, 1).toUpperCase() + MONTH_LABELS_FR[monthIndex0].slice(1, 4),
+      label:
+        MONTH_LABELS_FR[monthIndex0].slice(0, 1).toUpperCase() +
+        MONTH_LABELS_FR[monthIndex0].slice(1, 4),
       entries: inMonth.filter((r) => r.type === 'entry').reduce((sum, r) => sum + r.amount, 0),
       exits: inMonth.filter((r) => r.type === 'exit').reduce((sum, r) => sum + r.amount, 0)
     })
@@ -329,7 +350,11 @@ function describeActivity(
 
   if (entry.entityType === 'transaction' && entry.action === 'create') {
     const txn = db
-      .select({ type: transactions.type, amount: transactions.amount, category: transactions.category })
+      .select({
+        type: transactions.type,
+        amount: transactions.amount,
+        category: transactions.category
+      })
       .from(transactions)
       .where(eq(transactions.id, entry.entityId))
       .get()
@@ -361,7 +386,11 @@ function describeActivity(
 
   if (entry.entityType === 'student' && entry.action === 'create') {
     const student = db
-      .select({ firstName: students.firstName, lastName: students.lastName, matricule: students.matricule })
+      .select({
+        firstName: students.firstName,
+        lastName: students.lastName,
+        matricule: students.matricule
+      })
       .from(students)
       .where(eq(students.id, entry.entityId))
       .get()
@@ -506,7 +535,10 @@ export function getStats(): DashboardStats {
   const schoolYearId = schoolYear?.id ?? null
 
   const recoveryStats = tuitionService.getGlobalRecoveryStats()
-  const rate = recoveryStats.totalExpected > 0 ? (recoveryStats.totalPaid / recoveryStats.totalExpected) * 100 : 0
+  const rate =
+    recoveryStats.totalExpected > 0
+      ? (recoveryStats.totalPaid / recoveryStats.totalExpected) * 100
+      : 0
 
   return {
     kpis: computeKpis(now, schoolYear),

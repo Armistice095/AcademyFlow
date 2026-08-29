@@ -51,7 +51,10 @@ function createPrinterInstance(config: PrinterConfig): ThermalPrinter {
  * « Tester l'impression » des Paramètres (Phase 9.2). Lève une erreur
  * explicite en cas d'échec (message affiché tel quel côté renderer).
  */
-export async function testPrinterConnection(config: PrinterConfig, schoolInfo: SchoolInfo): Promise<void> {
+export async function testPrinterConnection(
+  config: PrinterConfig,
+  schoolInfo: SchoolInfo
+): Promise<void> {
   const printer = createPrinterInstance(config)
 
   const connected = await printer.isPrinterConnected()

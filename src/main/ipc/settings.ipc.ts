@@ -25,6 +25,18 @@ export function registerSettingsIpcHandlers(): void {
     return settingsService.getClasses()
   })
 
+  ipcMain.handle(IPC_CHANNELS.settings.createClass, async (_event, name: string) => {
+    return settingsService.createClass(name)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.settings.updateClass, async (_event, id: string, name: string) => {
+    return settingsService.updateClass(id, name)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.settings.deleteClass, async (_event, id: string) => {
+    return settingsService.deleteClass(id)
+  })
+
   ipcMain.handle(
     IPC_CHANNELS.settings.getTuitionSchedule,
     async (_event, classId: string, yearId: string) => {
@@ -43,7 +55,10 @@ export function registerSettingsIpcHandlers(): void {
     return settingsService.getSchoolInfo()
   })
 
-  ipcMain.handle(IPC_CHANNELS.settings.updateSchoolInfo, async (_event, data: UpdateSchoolInfoDTO) => {
-    return settingsService.updateSchoolInfo(data)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.settings.updateSchoolInfo,
+    async (_event, data: UpdateSchoolInfoDTO) => {
+      return settingsService.updateSchoolInfo(data)
+    }
+  )
 }

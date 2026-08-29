@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { FileDown, MoreHorizontal, Pencil, Plus, UserX, Users } from 'lucide-react'
+import { FileDown, HandCoins, MoreHorizontal, Pencil, Plus, UserX, Users } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import {
@@ -20,13 +20,14 @@ import { ConfirmDialog } from '@renderer/components/ui/confirm-dialog'
 import { DataTable } from '@renderer/components/data-table/DataTable'
 import { DataTableToolbar } from '@renderer/components/data-table/DataTableToolbar'
 import { EmployeeFormDialog } from './EmployeeFormDialog'
+import { GrantAdvanceDialog } from './GrantAdvanceDialog'
 import { usePersonnelStore } from '@renderer/stores/personnel.store'
 import { useToast } from '@renderer/lib/use-toast'
 import { api } from '@renderer/lib/ipc'
 import { openPdf } from '@renderer/lib/pdf'
 import { PersonnelListPDF } from '@renderer/pdf/PersonnelListPDF'
 import { formatCFA } from '@renderer/lib/formatters'
-import type { EmployeeFormValues } from '@renderer/lib/validators'
+import type { EmployeeFormValues, SalaryAdvanceFormValues } from '@renderer/lib/validators'
 import type { Employee } from '@shared/types/personnel.types'
 
 type StatusFilter = 'active' | 'all'
@@ -40,6 +41,8 @@ export function PersonnelListPage(): JSX.Element {
   const [formOpen, setFormOpen] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [employeeToDeactivate, setEmployeeToDeactivate] = useState<Employee | null>(null)
+  const [advanceDialogOpen, setAdvanceDialogOpen] = useState(false)
+  const [employeeForAdvance, setEmployeeForAdvance] = useState<Employee | null>(null)
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
@@ -92,6 +95,33 @@ export function PersonnelListPage(): JSX.Element {
     } catch (error) {
       toast({
         title: "Échec de l'enregistrement",
+        description: error instanceof Error ? error.message : 'Une erreur est survenue.',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleOpenAdvance = (employee: Employee): void => {
+    setEmployeeForAdvance(employee)
+    setAdvanceDialogOpen(true)
+  }
+
+  const handleGrantAdvance = async (values: SalaryAdvanceFormValues): Promise<void> => {
+    if (!employeeForAdvance) return
+    try {
+      await api.personnel.grantAdvance({
+        employeeId: employeeForAdvance.id,
+        amount: values.amount,
+        reason: values.reason
+      })
+      toast({
+        title: 'Avance accordée',
+        description: `${formatCFA(values.amount)} versés à ${employeeForAdvance.firstName} ${employeeForAdvance.lastName}. Le montant sera déduit de son prochain salaire.`
+      })
+      setAdvanceDialogOpen(false)
+    } catch (error) {
+      toast({
+        title: "Échec de l'octroi de l'avance",
         description: error instanceof Error ? error.message : 'Une erreur est survenue.',
         variant: 'destructive'
       })
@@ -174,6 +204,12 @@ export function PersonnelListPage(): JSX.Element {
                 Modifier
               </DropdownMenuItem>
               {row.original.isActive && (
+                <DropdownMenuItem onClick={() => handleOpenAdvance(row.original)}>
+                  <HandCoins className="mr-2 h-4 w-4" />
+                  Accorder une avance
+                </DropdownMenuItem>
+              )}
+              {row.original.isActive && (
                 <DropdownMenuItem
                   onClick={() => setEmployeeToDeactivate(row.original)}
                   className="text-destructive focus:text-destructive"
@@ -239,6 +275,13 @@ export function PersonnelListPage(): JSX.Element {
         onOpenChange={setFormOpen}
         employee={editingEmployee}
         onSubmit={handleSubmit}
+      />
+
+      <GrantAdvanceDialog
+        open={advanceDialogOpen}
+        onOpenChange={setAdvanceDialogOpen}
+        employee={employeeForAdvance}
+        onSubmit={handleGrantAdvance}
       />
 
       <ConfirmDialog

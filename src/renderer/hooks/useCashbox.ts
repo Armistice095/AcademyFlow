@@ -15,7 +15,17 @@ export function useCashbox(filters: JournalFilters): {
     void loadStats(filters.schoolYearId)
     void loadJournal(filters)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.type, filters.category, filters.studentId, filters.dateFrom, filters.dateTo, filters.query, filters.schoolYearId])
+  }, [
+    filters.type,
+    filters.category,
+    filters.studentId,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.query,
+    filters.schoolYearId,
+    filters.page,
+    filters.pageSize
+  ])
 
   return { stats, journal, isLoading, refresh }
 }

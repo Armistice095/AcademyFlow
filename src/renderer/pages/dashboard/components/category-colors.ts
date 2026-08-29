@@ -17,6 +17,7 @@ export const CATEGORY_COLORS: Record<CashCategory, string> = {
   autre_recette: '#94a3b8',
   depense_quotidienne: '#ef4444',
   salaire: '#0f172a',
+  avance_salaire: '#c084fc',
   achat_fournitures: '#06b6d4',
   charge_diverse: '#94a3b8'
 }

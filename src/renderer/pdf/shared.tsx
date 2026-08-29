@@ -97,7 +97,9 @@ export function SignatureBlock({ schoolInfo }: { schoolInfo: SchoolInfo }): JSX.
     <View style={pdfStyles.signatureBlock}>
       <View style={pdfStyles.signatureArea}>
         <Text>Le Directeur / La Directrice</Text>
-        {schoolInfo.stampDataUrl && <Image src={schoolInfo.stampDataUrl} style={pdfStyles.stampImage} />}
+        {schoolInfo.stampDataUrl && (
+          <Image src={schoolInfo.stampDataUrl} style={pdfStyles.stampImage} />
+        )}
       </View>
     </View>
   )

@@ -2,7 +2,7 @@
 
 export const DEFAULT_NATIONALITY = 'Béninoise'
 
-/** Génère (dans l'ordre) les classes créées au seed initial (voir database/seed.ts). */
+/** Ordre pédagogique de référence des classes du système béninois (primaire → secondaire). */
 export const DEFAULT_CLASS_ORDER = [
   'CI',
   'CP',

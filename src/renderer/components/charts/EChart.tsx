@@ -5,9 +5,21 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { CanvasRenderer } from 'echarts/renderers'
 import type { ComposeOption } from 'echarts/core'
 import type { BarSeriesOption, LineSeriesOption, PieSeriesOption } from 'echarts/charts'
-import type { GridComponentOption, LegendComponentOption, TooltipComponentOption } from 'echarts/components'
+import type {
+  GridComponentOption,
+  LegendComponentOption,
+  TooltipComponentOption
+} from 'echarts/components'
 
-echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  CanvasRenderer
+])
 
 export type EChartsOption = ComposeOption<
   | BarSeriesOption
@@ -42,7 +54,6 @@ export function EChart({ option, height = 220, className }: EChartProps): JSX.El
       chart.dispose()
       chartRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

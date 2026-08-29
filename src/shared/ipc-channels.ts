@@ -40,7 +40,10 @@ export const IPC_CHANNELS = {
     getJournal: 'cashbox:getJournal',
     getStudentAccount: 'cashbox:getStudentAccount',
     listArrears: 'cashbox:listArrears',
-    getReport: 'cashbox:getReport',
+    getReportV2: 'cashbox:getReportV2',
+    getTypeReport: 'cashbox:getTypeReport',
+    getReportByClass: 'cashbox:getReportByClass',
+    getReportByCashier: 'cashbox:getReportByCashier',
     getReceipt: 'cashbox:getReceipt',
     reprintReceipt: 'cashbox:reprintReceipt',
     getBalance: 'cashbox:getBalance',
@@ -55,7 +58,11 @@ export const IPC_CHANNELS = {
     getById: 'personnel:getById',
     markSalaryPaid: 'personnel:markSalaryPaid',
     getSalaryStatus: 'personnel:getSalaryStatus',
-    getSalaryHistory: 'personnel:getSalaryHistory'
+    getSalaryHistory: 'personnel:getSalaryHistory',
+    grantAdvance: 'personnel:grantAdvance',
+    cancelAdvance: 'personnel:cancelAdvance',
+    listAdvances: 'personnel:listAdvances',
+    getPendingAdvance: 'personnel:getPendingAdvance'
   },
 
   settings: {
@@ -64,6 +71,9 @@ export const IPC_CHANNELS = {
     createSchoolYear: 'settings:createSchoolYear',
     setCurrentSchoolYear: 'settings:setCurrentSchoolYear',
     getClasses: 'settings:getClasses',
+    createClass: 'settings:createClass',
+    updateClass: 'settings:updateClass',
+    deleteClass: 'settings:deleteClass',
     getTuitionSchedule: 'settings:getTuitionSchedule',
     saveTuitionSchedule: 'settings:saveTuitionSchedule',
     getSchoolInfo: 'settings:getSchoolInfo',
@@ -88,6 +98,8 @@ export const IPC_CHANNELS = {
     printReceipt: 'printer:printReceipt',
     testConnection: 'printer:testConnection',
     openPdf: 'printer:openPdf',
+    /** Ouvre tout fichier binaire déjà généré côté renderer (ex: export Excel) avec l'application par défaut du système. */
+    openFile: 'printer:openFile',
     /** Configuration de l'imprimante thermique (Phase 9.2). */
     getConfig: 'printer:getConfig',
     updateConfig: 'printer:updateConfig',
@@ -104,6 +116,13 @@ export const IPC_CHANNELS = {
     connectGoogleAccount: 'backup:connectGoogleAccount',
     disconnectGoogleAccount: 'backup:disconnectGoogleAccount',
     updateSettings: 'backup:updateSettings'
+  },
+
+  license: {
+    getStatus: 'license:getStatus',
+    activate: 'license:activate',
+    resync: 'license:resync',
+    markOnboardingCompleted: 'license:markOnboardingCompleted'
   },
 
   dashboard: {

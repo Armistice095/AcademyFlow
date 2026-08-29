@@ -26,9 +26,12 @@ export function registerStudentsIpcHandlers(): void {
     return studentService.create({ ...data, createdBy: requireCurrentUserId() })
   })
 
-  ipcMain.handle(IPC_CHANNELS.students.update, async (_event, id: string, data: UpdateStudentDTO) => {
-    return studentService.update(id, data, requireCurrentUserId())
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.students.update,
+    async (_event, id: string, data: UpdateStudentDTO) => {
+      return studentService.update(id, data, requireCurrentUserId())
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.students.delete, async (_event, id: string) => {
     studentService.softDelete(id, requireCurrentUserId())
@@ -46,9 +49,12 @@ export function registerStudentsIpcHandlers(): void {
     return studentService.getStats(query)
   })
 
-  ipcMain.handle(IPC_CHANNELS.students.listEnrollmentClassNames, async (_event, schoolYearId: string) => {
-    return studentService.listEnrollmentClassNames(schoolYearId)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.students.listEnrollmentClassNames,
+    async (_event, schoolYearId: string) => {
+      return studentService.listEnrollmentClassNames(schoolYearId)
+    }
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.students.listByClass,
@@ -75,9 +81,12 @@ export function registerStudentsIpcHandlers(): void {
     studentService.deleteGuardian(guardianId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.students.createEnrollment, async (_event, data: CreateEnrollmentDTO) => {
-    return studentService.createEnrollment(data)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.students.createEnrollment,
+    async (_event, data: CreateEnrollmentDTO) => {
+      return studentService.createEnrollment(data)
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.students.getEnrollmentHistory, async (_event, studentId: string) => {
     return studentService.getHistory(studentId)
@@ -90,9 +99,12 @@ export function registerStudentsIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.students.promoteStudents, async (_event, data: PromoteStudentsDTO) => {
-    return studentService.promoteStudents(data)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.students.promoteStudents,
+    async (_event, data: PromoteStudentsDTO) => {
+      return studentService.promoteStudents(data)
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.students.hasFinancialHistory, async (_event, studentId: string) => {
     return studentService.hasFinancialHistory(studentId)

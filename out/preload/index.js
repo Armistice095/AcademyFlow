@@ -107,7 +107,10 @@ const IPC_CHANNELS = {
     getJournal: "cashbox:getJournal",
     getStudentAccount: "cashbox:getStudentAccount",
     listArrears: "cashbox:listArrears",
-    getReport: "cashbox:getReport",
+    getReportV2: "cashbox:getReportV2",
+    getTypeReport: "cashbox:getTypeReport",
+    getReportByClass: "cashbox:getReportByClass",
+    getReportByCashier: "cashbox:getReportByCashier",
     getReceipt: "cashbox:getReceipt",
     reprintReceipt: "cashbox:reprintReceipt",
     getBalance: "cashbox:getBalance",
@@ -121,7 +124,11 @@ const IPC_CHANNELS = {
     getById: "personnel:getById",
     markSalaryPaid: "personnel:markSalaryPaid",
     getSalaryStatus: "personnel:getSalaryStatus",
-    getSalaryHistory: "personnel:getSalaryHistory"
+    getSalaryHistory: "personnel:getSalaryHistory",
+    grantAdvance: "personnel:grantAdvance",
+    cancelAdvance: "personnel:cancelAdvance",
+    listAdvances: "personnel:listAdvances",
+    getPendingAdvance: "personnel:getPendingAdvance"
   },
   settings: {
     getCurrentSchoolYear: "settings:getCurrentSchoolYear",
@@ -129,6 +136,9 @@ const IPC_CHANNELS = {
     createSchoolYear: "settings:createSchoolYear",
     setCurrentSchoolYear: "settings:setCurrentSchoolYear",
     getClasses: "settings:getClasses",
+    createClass: "settings:createClass",
+    updateClass: "settings:updateClass",
+    deleteClass: "settings:deleteClass",
     getTuitionSchedule: "settings:getTuitionSchedule",
     saveTuitionSchedule: "settings:saveTuitionSchedule",
     getSchoolInfo: "settings:getSchoolInfo",
@@ -151,6 +161,8 @@ const IPC_CHANNELS = {
     printReceipt: "printer:printReceipt",
     testConnection: "printer:testConnection",
     openPdf: "printer:openPdf",
+    /** Ouvre tout fichier binaire déjà généré côté renderer (ex: export Excel) avec l'application par défaut du système. */
+    openFile: "printer:openFile",
     /** Configuration de l'imprimante thermique (Phase 9.2). */
     getConfig: "printer:getConfig",
     updateConfig: "printer:updateConfig",
@@ -166,6 +178,12 @@ const IPC_CHANNELS = {
     connectGoogleAccount: "backup:connectGoogleAccount",
     disconnectGoogleAccount: "backup:disconnectGoogleAccount",
     updateSettings: "backup:updateSettings"
+  },
+  license: {
+    getStatus: "license:getStatus",
+    activate: "license:activate",
+    resync: "license:resync",
+    markOnboardingCompleted: "license:markOnboardingCompleted"
   },
   dashboard: {
     /** Agrégat complet du tableau de bord financier (F-019, Phase 9.1). */
@@ -200,7 +218,10 @@ const api = {
     getJournal: (filters) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getJournal, filters),
     getStudentAccount: (studentId) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getStudentAccount, studentId),
     listArrears: () => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.listArrears),
-    getReport: (from, to) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReport, from, to),
+    getReportV2: (filters) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportV2, filters),
+    getTypeReport: (filters, type) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getTypeReport, filters, type),
+    getReportByClass: (filters) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportByClass, filters),
+    getReportByCashier: (filters) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReportByCashier, filters),
     getReceipt: (transactionId) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getReceipt, transactionId),
     reprintReceipt: (transactionId) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.reprintReceipt, transactionId),
     getBalance: (schoolYearId) => electron.ipcRenderer.invoke(IPC_CHANNELS.cashbox.getBalance, schoolYearId),
@@ -214,7 +235,11 @@ const api = {
     getById: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.getById, id),
     markSalaryPaid: (employeeId, month, year) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.markSalaryPaid, employeeId, month, year),
     getSalaryStatus: (month, year) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryStatus, month, year),
-    getSalaryHistory: (employeeId) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryHistory, employeeId)
+    getSalaryHistory: (employeeId) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.getSalaryHistory, employeeId),
+    grantAdvance: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.grantAdvance, data),
+    cancelAdvance: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.cancelAdvance, id),
+    listAdvances: (employeeId) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.listAdvances, employeeId),
+    getPendingAdvance: (employeeId) => electron.ipcRenderer.invoke(IPC_CHANNELS.personnel.getPendingAdvance, employeeId)
   },
   settings: {
     getCurrentSchoolYear: () => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.getCurrentSchoolYear),
@@ -222,6 +247,9 @@ const api = {
     createSchoolYear: (label) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.createSchoolYear, label),
     setCurrentSchoolYear: (yearId) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.setCurrentSchoolYear, yearId),
     getClasses: () => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.getClasses),
+    createClass: (name) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.createClass, name),
+    updateClass: (id, name) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.updateClass, id, name),
+    deleteClass: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.deleteClass, id),
     getTuitionSchedule: (classId, yearId) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.getTuitionSchedule, classId, yearId),
     saveTuitionSchedule: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.saveTuitionSchedule, data),
     getSchoolInfo: () => electron.ipcRenderer.invoke(IPC_CHANNELS.settings.getSchoolInfo),
@@ -243,6 +271,7 @@ const api = {
     printReceipt: (receiptId) => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.printReceipt, receiptId),
     testConnection: () => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.testConnection),
     openPdf: (base64, fileName) => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.openPdf, base64, fileName),
+    openFile: (base64, fileName) => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.openFile, base64, fileName),
     getConfig: () => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.getConfig),
     updateConfig: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.updateConfig, data),
     getStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS.printer.getStatus)
@@ -259,6 +288,12 @@ const api = {
   },
   dashboard: {
     getStats: () => electron.ipcRenderer.invoke(IPC_CHANNELS.dashboard.getStats)
+  },
+  license: {
+    getStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS.license.getStatus),
+    activate: (dto) => electron.ipcRenderer.invoke(IPC_CHANNELS.license.activate, dto),
+    resync: () => electron.ipcRenderer.invoke(IPC_CHANNELS.license.resync),
+    markOnboardingCompleted: () => electron.ipcRenderer.invoke(IPC_CHANNELS.license.markOnboardingCompleted)
   }
 };
 if (process.contextIsolated) {

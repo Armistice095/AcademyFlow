@@ -10,15 +10,13 @@ import { CASH_CATEGORY_LABELS } from '@shared/constants/categories'
  */
 export function buildStudentPaymentRows(transactions: Transaction[]): StudentPaymentRow[] {
   return transactions
-    .map(
-      (t): StudentPaymentRow => ({
-        date: t.createdAt,
-        description: t.description?.trim() || CASH_CATEGORY_LABELS[t.category],
-        amount: t.amount,
-        status: t.status === 'cancelled' ? 'annule' : 'paye',
-        transactionId: t.id
-      })
-    )
+    .map((t): StudentPaymentRow => ({
+      date: t.createdAt,
+      description: t.description?.trim() || CASH_CATEGORY_LABELS[t.category],
+      amount: t.amount,
+      status: t.status === 'cancelled' ? 'annule' : 'paye',
+      transactionId: t.id
+    }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
